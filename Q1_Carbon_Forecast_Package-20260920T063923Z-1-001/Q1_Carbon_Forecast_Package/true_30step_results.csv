@@ -1,0 +1,4 @@
+Model,RMSE,MAPE_%
+"ARIMA (1,1,1)",1.9921,2.5967
+Ridge Recursive,2.3828,3.4166
+Naive 30-Step,2.7031,2.9263

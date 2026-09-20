@@ -12,8 +12,8 @@ export type CarbonForecastSuccess = {
 export type CO2PredictionSuccess = { status: 'success'; co2_per_capita_t: number; model: { name: string; r2: number; rmse: number } }
 export type ScenarioSuccess = {
   status: 'success'; country: string; target_year: 2030
-  baseline: { label: string; energy_mix: EnergyMix; co2_per_capita_t: number }
-  user_scenario: { label: string; energy_mix: EnergyMix; co2_per_capita_t: number }
+  baseline: { label: string; energy_mix: EnergyMix; co2_per_capita_t: number; yearly_forecast?: { year: 2027 | 2028 | 2029 | 2030; co2_per_capita_t: number; co2_emissions_mt?: number | null }[] | null }
+  user_scenario: { label: string; energy_mix: EnergyMix; co2_per_capita_t: number; yearly_forecast?: { year: 2027 | 2028 | 2029 | 2030; co2_per_capita_t: number; co2_emissions_mt?: number | null }[] | null }
   comparison: { baseline: number; scenario: number; difference: number; reduction: number; reduction_percent: number; direction: 'increase' | 'decrease' | 'unchanged' }
   model: { name: string; r2: number; rmse: number; features?: string[] | null; train_period?: string | null; test_methodology?: string | null }
 }

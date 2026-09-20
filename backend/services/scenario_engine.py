@@ -31,8 +31,8 @@ class ScenarioEngine:
         scenario_value = scenario_prediction.co2_per_capita_t
         return ScenarioComparisonSuccess.model_validate({
             "status": "success", "country": country, "target_year": target_year,
-            "baseline": {"label": "Current Trend", "energy_mix": baseline_mix.model_dump(), "co2_per_capita_t": baseline_value},
-            "user_scenario": {"label": "Your Energy Plan", "energy_mix": user_mix.model_dump(), "co2_per_capita_t": scenario_value},
+            "baseline": {"label": "Current Trend", "energy_mix": baseline_mix.model_dump(), "co2_per_capita_t": baseline_value, "yearly_forecast": baseline.get("yearly_forecast")},
+            "user_scenario": {"label": "Your Energy Plan", "energy_mix": user_mix.model_dump(), "co2_per_capita_t": scenario_value, "yearly_forecast": scenario.get("yearly_forecast")},
             "comparison": compare_predictions(baseline_value, scenario_value),
             "model": scenario_prediction.model.model_dump(),
         }).model_dump()

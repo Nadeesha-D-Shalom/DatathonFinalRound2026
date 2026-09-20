@@ -72,6 +72,28 @@ class BackendTests(unittest.TestCase):
         response = engine.compare('Germany', 2030, EnergyMix.model_validate(VALID_MIX))
         self.assertEqual(agent.calls, 2)
         self.assertEqual(response['comparison']['reduction_percent'], 30)
+        self.assertEqual(response['baseline']['energy_mix'], VALID_MIX)
+        self.assertEqual(response['model']['name'], 'test adapter')
+
+    def test_invalid_annual_model_output_is_rejected(self):
+        class InvalidAnnualAgent:
+            connected = True
+            def predict(self, energy_mix):
+                return {'status': 'success', 'co2_per_capita_t': 7, 'yearly_forecast': [{'year': 2028, 'co2_per_capita_t': 7}], 'model': {'name': 'test', 'r2': 0.5, 'rmse': 1}}
+        engine = ScenarioEngine(InvalidAnnualAgent(), lambda country: {'status': 'success', 'energy_mix': VALID_MIX})
+        response = Supervisor(co2_agent=InvalidAnnualAgent(), scenario_engine=engine).run('compare_2030_scenario', {'country': 'Germany', 'energy_mix': VALID_MIX})
+        self.assertEqual(response['status'], 'prediction_error')
+
+    def test_valid_annual_forecast_passes_through_without_interpolation(self):
+        class AnnualAgent:
+            connected = True
+            def predict(self, energy_mix):
+                annual = [{'year': year, 'co2_per_capita_t': 7, 'co2_emissions_mt': 100} for year in range(2027, 2031)]
+                return {'status': 'success', 'co2_per_capita_t': 7, 'yearly_forecast': annual, 'model': {'name': 'test', 'r2': 0.5, 'rmse': 1}}
+        engine = ScenarioEngine(AnnualAgent(), lambda country: {'status': 'success', 'energy_mix': VALID_MIX})
+        response = Supervisor(scenario_engine=engine).run('compare_2030_scenario', {'country': 'Germany', 'energy_mix': VALID_MIX})
+        self.assertEqual(response['status'], 'success')
+        self.assertEqual([point['year'] for point in response['user_scenario']['yearly_forecast']], [2027, 2028, 2029, 2030])
 
     def test_specialist_failure_is_sanitized(self):
         class BrokenCarbonAgent:

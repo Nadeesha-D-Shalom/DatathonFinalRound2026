@@ -13,3 +13,5 @@ The dashboard reads `NEXT_PUBLIC_API_BASE_URL` (see `dashboard/.env.example`); i
 The specialist models are currently absent. Carbon and CO₂ agents return `model_not_connected`; the scenario engine returns `baseline_not_available` until a validated 2030 energy mix is available. No value in these development responses is a prediction.
 
 Integrate the delivered model, its exact feature order, artifact name, and measured metrics inside the corresponding agent file. The agent must preserve its `predict()` response contract. The scenario baseline provider in `services/scenario_engine.py` must be connected to a validated 2030 energy-mix output before comparisons can run. Both scenario branches call the same CO₂ agent.
+
+If the delivered CO₂ model provides annual values, each agent response may include `yearly_forecast` with exactly one validated entry for each year from 2027 through 2030. Each entry includes `co2_per_capita_t` and may include `co2_emissions_mt` when a validated total-emissions methodology is supplied. The 2030 annual per-capita value must match the endpoint. The dashboard never interpolates missing annual predictions.

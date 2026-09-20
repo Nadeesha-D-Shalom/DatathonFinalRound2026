@@ -55,12 +55,38 @@ class CO2PredictionSuccess(BaseModel):
     status: Literal["success"]
     co2_per_capita_t: float = Field(ge=0, allow_inf_nan=False)
     model: CO2ModelInfo
+    yearly_forecast: list["AnnualCO2Prediction"] | None = None
+
+    @model_validator(mode="after")
+    def validate_annual_forecast(self):
+        if self.yearly_forecast is not None:
+            years = [point.year for point in self.yearly_forecast]
+            if years != [2027, 2028, 2029, 2030] or abs(self.yearly_forecast[-1].co2_per_capita_t - self.co2_per_capita_t) > 1e-6:
+                raise ValueError("Annual prediction must cover 2027–2030 and match its 2030 endpoint.")
+        return self
 
 
 class ScenarioValue(BaseModel):
     label: str
     energy_mix: EnergyMix
     co2_per_capita_t: float = Field(ge=0, allow_inf_nan=False)
+    yearly_forecast: list["AnnualCO2Prediction"] | None = None
+
+    @model_validator(mode="after")
+    def validate_annual_forecast(self):
+        if self.yearly_forecast is not None:
+            years = [point.year for point in self.yearly_forecast]
+            if years != [2027, 2028, 2029, 2030]:
+                raise ValueError("Annual forecast must cover 2027 through 2030 in order.")
+            if abs(self.yearly_forecast[-1].co2_per_capita_t - self.co2_per_capita_t) > 1e-6:
+                raise ValueError("The 2030 annual forecast must match the 2030 endpoint.")
+        return self
+
+
+class AnnualCO2Prediction(BaseModel):
+    year: Literal[2027, 2028, 2029, 2030]
+    co2_per_capita_t: float = Field(ge=0, allow_inf_nan=False)
+    co2_emissions_mt: float | None = Field(default=None, ge=0, allow_inf_nan=False)
 
 
 class ComparisonResult(BaseModel):
