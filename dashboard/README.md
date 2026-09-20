@@ -1,4 +1,6 @@
-# CarbonScope Intelligence
+# Monsoon Mandate
+
+The complete release checklist is in [`../TEST_PLAN.md`](../TEST_PLAN.md). The shorter interactive walkthrough is in [`../MANUAL_TESTING.md`](../MANUAL_TESTING.md).
 
 Next.js dashboard for the five supplied CodeFest Datathon 2026 datasets.
 
@@ -7,6 +9,8 @@ From the repository root, run `python build_data.py` to regenerate the compact d
 The CO₂ regression is trained in `build_data.py` on 2000–2020 country-year observations and tested on 2021–2026 observations. Its R², RMSE, predictions and feature importance are exported to `public/data/dashboard.json`. Transition categories are assigned by documented thresholds in the same script.
 
 The exporter also fits market-specific random forest autoregressions with chronological holdouts, evaluates an EU ETS baseline against prior-event features, and builds 2026–2030 empirical analogue pathways from observed country archetypes. Carbon uncertainty bands are approximate and are not calibrated multi-step intervals. The scenario assumptions are observed rates, not causal policy effects.
+
+The visible 2030 Simulator standard paths now come from the validated Q3 package through FastAPI. They show CO₂ per person for the six representative countries in Q3; other countries retain observed history and transition classification but show an unavailable scenario state. Q3 is a deterministic conditional scenario analysis, separate from the still-disconnected custom energy-mix regression specialist. The old analogue pathways remain in the generated export for legacy analysis only and are not used by the visible Simulator or Country Explorer forecasts.
 
 ## Climate Intelligence Assistant
 

@@ -24,7 +24,9 @@ def validate_market(market: str) -> str:
 
 def validate_country(country: str) -> str:
     countries = available_values("energy_mix_yearly.csv", "country")
-    match = next((item for item in countries if item.casefold() == country.strip().casefold()), None)
+    match = next(
+        (item for item in countries if item.casefold() == country.strip().casefold()), None
+    )
     if match is None:
         raise ValueError(f"Country unavailable in the supplied energy data: {country}.")
     return match

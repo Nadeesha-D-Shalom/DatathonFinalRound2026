@@ -57,9 +57,9 @@ This feature estimates CO₂ per person from an energy mix; it is not the 2030 s
 | --- | --- |
 | Overview | Change market; verify price cards and chart change, and the country count is present. |
 | Carbon Price Forecast | Change market; verify the export forecast and live-specialist status are labeled separately. |
-| Climate Events | Verify baseline and event-aware errors, recent events, and the expanded event ledger. Do not interpret association as causation. |
+| Climate Events | Verify the connected Q2 Ridge baseline/event-aware errors, MAE/MAPE, feature coefficients, event-window result, and recent event records. Do not interpret predictive association as causation. |
 | Country Explorer | Change country; verify observed emissions, energy shares, transition status, and historical charts change. |
-| Model Results | Verify exported model metrics and the event experiment are shown with their methods. These exports do not imply live FastAPI agents are connected. |
+| Model Results | Verify exported Carbon/CO₂ metrics and the API-backed Q2 result are shown with their methods. These exports do not imply live Carbon/CO₂ FastAPI agents are connected. |
 | Business Case | Verify the target users, product modules, commercial options, and architecture appear. |
 | Data & technical → Data Quality | Verify all five competition CSVs are listed with coverage and quality counts. |
 | Ask assistant | Ask for a country summary, a market forecast, and a comparison; answers should cite competition-data or analysis-output sources. |

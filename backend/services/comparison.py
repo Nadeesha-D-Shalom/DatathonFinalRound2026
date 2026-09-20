@@ -12,5 +12,7 @@ def compare_predictions(baseline: float, scenario: float) -> dict:
         "difference": difference,
         "reduction": reduction,
         "reduction_percent": reduction / baseline * 100 if baseline > 0 else 0.0,
-        "direction": "increase" if difference > 0 else "decrease" if difference < 0 else "unchanged",
+        "direction": (
+            "increase" if difference > 0 else "decrease" if difference < 0 else "unchanged"
+        ),
     }

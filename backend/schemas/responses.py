@@ -6,7 +6,14 @@ from backend.schemas.requests import EnergyMix
 
 
 class StateResponse(BaseModel):
-    status: Literal["model_not_connected", "baseline_not_available", "forecast_not_available", "year_not_supported", "validation_error", "prediction_error"]
+    status: Literal[
+        "model_not_connected",
+        "baseline_not_available",
+        "forecast_not_available",
+        "year_not_supported",
+        "validation_error",
+        "prediction_error",
+    ]
     message: str
     target_year: Literal[2027, 2028, 2029, 2030] | None = None
 
@@ -118,6 +125,12 @@ class ScenarioComparisonSuccess(BaseModel):
             point = next(point for point in value.yearly_forecast if point.year == self.target_year)
             if abs(point.co2_per_capita_t - value.co2_per_capita_t) > 1e-6:
                 raise ValueError("The selected-year prediction must match the annual forecast.")
-            if value.co2_emissions_mt is not None and point.co2_emissions_mt is not None and abs(point.co2_emissions_mt - value.co2_emissions_mt) > 1e-6:
-                raise ValueError("The selected-year total emissions must match the annual forecast.")
+            if (
+                value.co2_emissions_mt is not None
+                and point.co2_emissions_mt is not None
+                and abs(point.co2_emissions_mt - value.co2_emissions_mt) > 1e-6
+            ):
+                raise ValueError(
+                    "The selected-year total emissions must match the annual forecast."
+                )
         return self

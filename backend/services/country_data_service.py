@@ -8,8 +8,16 @@ from pathlib import Path
 
 DATASET_DIR = Path(__file__).resolve().parents[2] / "Dataset"
 ENERGY_FIELDS = (
-    "coal_pct", "oil_pct", "gas_pct", "nuclear_pct", "hydro_pct",
-    "solar_pct", "wind_pct", "other_renewables_pct", "renewables_total_pct", "fossil_total_pct",
+    "coal_pct",
+    "oil_pct",
+    "gas_pct",
+    "nuclear_pct",
+    "hydro_pct",
+    "solar_pct",
+    "wind_pct",
+    "other_renewables_pct",
+    "renewables_total_pct",
+    "fossil_total_pct",
 )
 CO2_FIELDS = ("co2_emissions_mt", "co2_per_capita_t", "co2_intensity_kg_per_gdp_usd")
 
@@ -66,12 +74,23 @@ def _datasets():
 
 def get_countries() -> list[str]:
     co2, energy = _datasets()
-    return sorted(country for country in co2.keys() & energy.keys() if co2[country].keys() & energy[country].keys())
+    return sorted(
+        country
+        for country in co2.keys() & energy.keys()
+        if co2[country].keys() & energy[country].keys()
+    )
 
 
 def get_country_energy_co2(country: str) -> dict:
     co2, energy = _datasets()
-    actual = next((name for name in co2.keys() & energy.keys() if name.casefold() == country.strip().casefold()), None)
+    actual = next(
+        (
+            name
+            for name in co2.keys() & energy.keys()
+            if name.casefold() == country.strip().casefold()
+        ),
+        None,
+    )
     if actual is None:
         raise CountryNotFound(country)
     common_years = sorted(co2[actual].keys() & energy[actual].keys())
@@ -83,13 +102,29 @@ def get_country_energy_co2(country: str) -> dict:
     if latest_co2["region"] != latest_energy["region"]:
         raise DatasetError(f"Region mismatch for {actual}, {latest_year}.")
     return {
-        "status": "success", "country": actual, "region": latest_co2["region"],
+        "status": "success",
+        "country": actual,
+        "region": latest_co2["region"],
         "latest_year": latest_year,
         "co2": {field: latest_co2[field] for field in CO2_FIELDS},
         "energy_mix": {field: latest_energy[field] for field in ENERGY_FIELDS},
         "history": {
-            "co2": [{"year": year, "co2_emissions_mt": item["co2_emissions_mt"], "co2_per_capita_t": item["co2_per_capita_t"]} for year, item in sorted(co2[actual].items())],
-            "energy_mix": [{"year": year, "renewables_total_pct": item["renewables_total_pct"], "fossil_total_pct": item["fossil_total_pct"]} for year, item in sorted(energy[actual].items())],
+            "co2": [
+                {
+                    "year": year,
+                    "co2_emissions_mt": item["co2_emissions_mt"],
+                    "co2_per_capita_t": item["co2_per_capita_t"],
+                }
+                for year, item in sorted(co2[actual].items())
+            ],
+            "energy_mix": [
+                {
+                    "year": year,
+                    "renewables_total_pct": item["renewables_total_pct"],
+                    "fossil_total_pct": item["fossil_total_pct"],
+                }
+                for year, item in sorted(energy[actual].items())
+            ],
         },
         "sources": ["co2_emissions_yearly.csv", "energy_mix_yearly.csv"],
     }

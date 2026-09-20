@@ -32,11 +32,16 @@ class ScenarioEngine:
             return StateResponse.model_validate(scenario).model_dump(exclude_none=True)
         baseline_prediction = CO2PredictionSuccess.model_validate(baseline)
         scenario_prediction = CO2PredictionSuccess.model_validate(scenario)
+
         def selected_prediction(prediction: CO2PredictionSuccess):
             if prediction.yearly_forecast is not None:
-                point = next(point for point in prediction.yearly_forecast if point.year == target_year)
+                point = next(
+                    point for point in prediction.yearly_forecast if point.year == target_year
+                )
                 return point.co2_per_capita_t, point.co2_emissions_mt
-            if prediction.prediction_year == target_year or (target_year == 2030 and prediction.prediction_year is None):
+            if prediction.prediction_year == target_year or (
+                target_year == 2030 and prediction.prediction_year is None
+            ):
                 return prediction.co2_per_capita_t, prediction.co2_emissions_mt
             return None
 
@@ -50,10 +55,26 @@ class ScenarioEngine:
             }
         baseline_value, baseline_mt = baseline_selected
         scenario_value, scenario_mt = scenario_selected
-        return ScenarioComparisonSuccess.model_validate({
-            "status": "success", "country": country, "target_year": target_year,
-            "baseline": {"label": "Current Trend", "energy_mix": baseline_mix.model_dump(), "co2_per_capita_t": baseline_value, "co2_emissions_mt": baseline_mt, "yearly_forecast": baseline.get("yearly_forecast")},
-            "user_scenario": {"label": "Your Energy Plan", "energy_mix": user_mix.model_dump(), "co2_per_capita_t": scenario_value, "co2_emissions_mt": scenario_mt, "yearly_forecast": scenario.get("yearly_forecast")},
-            "comparison": compare_predictions(baseline_value, scenario_value),
-            "model": scenario_prediction.model.model_dump(),
-        }).model_dump()
+        return ScenarioComparisonSuccess.model_validate(
+            {
+                "status": "success",
+                "country": country,
+                "target_year": target_year,
+                "baseline": {
+                    "label": "Current Trend",
+                    "energy_mix": baseline_mix.model_dump(),
+                    "co2_per_capita_t": baseline_value,
+                    "co2_emissions_mt": baseline_mt,
+                    "yearly_forecast": baseline.get("yearly_forecast"),
+                },
+                "user_scenario": {
+                    "label": "Your Energy Plan",
+                    "energy_mix": user_mix.model_dump(),
+                    "co2_per_capita_t": scenario_value,
+                    "co2_emissions_mt": scenario_mt,
+                    "yearly_forecast": scenario.get("yearly_forecast"),
+                },
+                "comparison": compare_predictions(baseline_value, scenario_value),
+                "model": scenario_prediction.model.model_dump(),
+            }
+        ).model_dump()

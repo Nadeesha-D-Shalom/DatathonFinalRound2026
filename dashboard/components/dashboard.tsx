@@ -1,38 +1,1681 @@
-'use client';
-import {useEffect,useMemo,useState} from 'react';
-import {Area,AreaChart,Bar,BarChart,CartesianGrid,Cell,ComposedChart,Legend,Line,LineChart,ReferenceLine,ResponsiveContainer,Scatter,ScatterChart,Tooltip,XAxis,YAxis,ZAxis} from 'recharts';
-import {Activity,BarChart3,BookOpen,BriefcaseBusiness,CloudSun,Database,Earth,FlaskConical,Gauge,Globe2,LayoutDashboard,Leaf,LineChart as LineIcon,Menu,MessageCircle,ShieldCheck,TrendingUp} from 'lucide-react';
-import { Card as UiCard } from '@/components/ui/card';
-import AssistantPanel from '@/components/assistant/AssistantPanel';
-import type {DashboardData} from '@/lib/assistant/types';
-type Row={year:number;country:string;region:string;co2_emissions_mt:number;co2_per_capita_t:number;co2_intensity_kg_per_gdp_usd:number;population_millions:number;coal_pct:number;oil_pct:number;gas_pct:number;nuclear_pct:number;hydro_pct:number;solar_pct:number;wind_pct:number;other_renewables_pct:number;renewables_total_pct:number;fossil_total_pct:number};
-type Point={date:string;price:number;rolling30:number;volatility30:number|null};
-type Data={markets:string[];countries:string[];regions:string[];carbon:Record<string,{currency:string;history:Point[];latest:number;latestDate:string;volatility:number|null}>;events:{date:string;region:string;event_type:string;severity_score:number;description:string;is_policy:number;is_extreme_weather:number;is_disaster:number}[];countriesData:Row[];temperature:{year_month:string;temp_anomaly_c:number;co2_ppm:number|null}[];archetypes:{country:string;renewableChange:number;fossilChange:number;emissionsChange:number;category:string;firstYear:number;lastYear:number}[];co2Model?:{algorithm:string;features:string[];target:string;train:string;test:string;r2:number;rmse:number;predictions:{actual:number;predicted:number;country:string;year:number}[];importance:{feature:string;value:number}[]};quality:{name:string;rows:number;columns:number;missing:number;start:string;end:string;countries:number|null;markets:number|null;regions:number|null}[];summary:{carbonRows:number;eventCount:number;countryCount:number;latestYear:number;globalTemperatureLatest:{year_month:string;temp_anomaly_c:number}}};
-const nav=[['Overview',LayoutDashboard],['Carbon Markets',LineIcon],['Climate Event Impact',CloudSun],['CO₂ Intelligence',Activity],['Energy Transition',Leaf],['2030 Scenario Lab',FlaskConical],['Country Explorer',Globe2],['Model Performance',Gauge],['Product / Business Case',BriefcaseBusiness],['Data Quality',Database]] as const;
-const colors={green:'#2b8c69',blue:'#2782a1',orange:'#d99645',dark:'#173b48',light:'#b9d8ce'};
-const fmt=(n:number|undefined,d=1)=>typeof n==='number'&&Number.isFinite(n)?n.toLocaleString(undefined,{maximumFractionDigits:d,minimumFractionDigits:d}):'Unavailable';
-function Card({title,sub,children,className=''}:{title:string;sub?:string;children:React.ReactNode;className?:string}){return <UiCard className={className}><h2>{title}</h2>{sub&&<p className="sub">{sub}</p>}{children}</UiCard>}
-function Kpi({label,value,detail}:{label:string;value:string;detail:string}){return <div className="card kpi"><div className="label">{label}</div><div className="value">{value}</div><div className="detail">{detail}</div></div>}
-function Empty({children}:{children:React.ReactNode}){return <div className="empty">{children}</div>}
-function Chart({children,tall=false,short=false}:{children:React.ReactNode;tall?:boolean;short?:boolean}){return <div className={'chart '+(tall?'tall ':'')+(short?'short':'')}><ResponsiveContainer width="100%" height="100%">{children as React.ReactElement}</ResponsiveContainer></div>}
-function Select({value,onChange,options}:{value:string;onChange:(s:string)=>void;options:string[]}){return <select className="select" value={value} onChange={e=>onChange(e.target.value)}>{options.map(x=><option key={x}>{x}</option>)}</select>}
-function Title({title,sub,controls}:{title:string;sub:string;controls?:React.ReactNode}){return <div className="pagehead"><div><div className="eyebrow">CarbonScope Intelligence / Analytics</div><h1>{title}</h1><p>{sub}</p></div>{controls&&<div className="controls">{controls}</div>}</div>}
-function Section({title,detail}:{title:string;detail?:string}){return <div className="section"><h2>{title}</h2><span>{detail}</span></div>}
-function CarbonChart({market,data}:{market:string;data:Data}){const c=data.carbon[market];const points=c?.history.slice(-450)||[];return <Chart tall><ComposedChart data={points} margin={{top:8,right:10,bottom:6,left:0}}><CartesianGrid stroke="#edf1f2" vertical={false}/><XAxis dataKey="date" tick={{fontSize:10}} minTickGap={55}/><YAxis tick={{fontSize:10}} width={48} domain={['auto','auto']}/><Tooltip contentStyle={{fontSize:11}} formatter={(v:any)=>[fmt(v,2)+' '+c.currency,'Price']}/><Legend/><Area type="monotone" dataKey="price" name="Observed carbon price" stroke={colors.green} fill="#dff0e8" strokeWidth={2} fillOpacity={.5} dot={false}/></ComposedChart></Chart>}
-function ForecastChart({market,data}:{market:string;data:Data}){const c=data.carbon[market] as any;const history=c.history.slice(-160).map((p:Point)=>({date:p.date,observed:p.price}));const boundary=history.at(-1);const forecast=c.forecast||[];const points=[...history,...(boundary?[{date:boundary.date,forecast:boundary.observed}]:[]),...forecast.map((p:any)=>({date:p.date,forecast:p.price,lower:p.lower,upper:p.upper}))];return <Chart tall><ComposedChart data={points}><CartesianGrid stroke="#edf1f2" vertical={false}/><XAxis dataKey="date" minTickGap={52} tick={{fontSize:10}}/><YAxis domain={['auto','auto']} tick={{fontSize:10}} width={48}/><Tooltip formatter={(v:any,name:any)=>[fmt(Number(v),2)+' '+c.currency,name]}/><Legend/><ReferenceLine x={boundary?.date} stroke="#8aa0a8" strokeDasharray="4 4" label={{value:'Forecast starts',fontSize:10,position:'top'}}/><Line dataKey="observed" name="Observed price" stroke={colors.green} strokeWidth={2} dot={false}/><Line dataKey="forecast" name="30-day forecast" stroke={colors.blue} strokeWidth={2.5} dot={false}/><Line dataKey="lower" name="Approx. lower band" stroke={colors.light} strokeDasharray="4 4" dot={false}/><Line dataKey="upper" name="Approx. upper band" stroke={colors.light} strokeDasharray="4 4" dot={false}/></ComposedChart></Chart>}
-function EventPriceChart({market,data}:{market:string;data:Data}){const source=data.carbon[market].history;const marks=data.events.filter(e=>e.date>=source[0].date&&e.date<=source.at(-1)!.date);const points=source.map(p=>({...p,policyMarker:null as number|null,weatherMarker:null as number|null,disasterMarker:null as number|null,otherMarker:null as number|null,eventDetails:[] as string[]}));for(const e of marks){const i=points.findIndex(p=>p.date>=e.date);if(i<0)continue;const key=e.is_policy?'policyMarker':e.is_extreme_weather?'weatherMarker':e.is_disaster?'disasterMarker':'otherMarker';(points[i] as any)[key]=points[i].price;points[i].eventDetails.push(`${e.date} · ${e.region} · ${e.event_type} · severity ${e.severity_score}: ${e.description}`)}return <Chart tall><ComposedChart data={points}><CartesianGrid stroke="#edf1f2" vertical={false}/><XAxis dataKey="date" minTickGap={60} tick={{fontSize:10}}/><YAxis domain={['auto','auto']} tick={{fontSize:10}} width={48}/><Tooltip content={({active,payload,label})=>active&&payload?.length?<div className="tooltip" style={{padding:10,maxWidth:280}}><strong>{label}</strong><div>{fmt(Number(payload[0]?.payload?.price),2)} {data.carbon[market].currency}</div>{(payload[0]?.payload?.eventDetails||[]).map((x:string)=><div key={x} style={{marginTop:6}}>{x}</div>)}</div>:null}/><Legend/><Line dataKey="price" name="Observed price" stroke={colors.green} dot={false} strokeWidth={2}/><Scatter dataKey="policyMarker" name="Policy" fill={colors.blue}/><Scatter dataKey="weatherMarker" name="Extreme weather" fill={colors.orange}/><Scatter dataKey="disasterMarker" name="Disaster" fill="#b74e5a"/><Scatter dataKey="otherMarker" name="Other event" fill="#8b7ca9"/></ComposedChart></Chart>}
-export function Overview({data,market,setMarket}:{data:Data;market:string;setMarket:(x:string)=>void}){const latest=data.countriesData.filter(x=>x.year===data.summary.latestYear);const renew=latest.length?latest.reduce((a,b)=>a+b.renewables_total_pct,0)/latest.length:0;const global=data.countriesData.filter(x=>x.country==='World'||x.country==='Global');const years=Array.from(new Set(data.countriesData.map(x=>x.year))).sort();const trend=years.map(year=>{const rows=data.countriesData.filter(x=>x.year===year);return {year,renewable:rows.reduce((a,b)=>a+b.renewables_total_pct,0)/rows.length,fossil:rows.reduce((a,b)=>a+b.fossil_total_pct,0)/rows.length,emissions:rows.reduce((a,b)=>a+b.co2_emissions_mt,0)}});const c=data.carbon[market];return <><Title title="Climate & Energy Intelligence Overview" sub="Data-driven insights across carbon markets, emissions and the global energy transition." controls={<Select value={market} onChange={setMarket} options={data.markets}/>}/><div className="grid kpis"><Kpi label={market.replaceAll('_',' ')+ ' carbon price'} value={c?`${fmt(c.latest,2)} ${c.currency}`:'Unavailable'} detail={c?.latestDate||'No source data'}/><Kpi label="Average renewable share" value={fmt(renew,1)+'%'} detail={`${data.summary.latestYear} · unweighted country average`}/><Kpi label="Countries analyzed" value={String(data.summary.countryCount)} detail="CO₂ and energy mix datasets"/><Kpi label="Climate events" value={String(data.summary.eventCount)} detail="Supplied event records"/></div><Card title={`${market.replaceAll('_',' ')} carbon price history`} sub="Observed daily prices · 30-trading-day model forecast · chronological held-out evaluation"><ForecastChart market={market} data={data}/><div className="note">The forecast is a recursive random forest estimate. Bands approximate uncertainty from one-step test errors and are not calibrated for 30-step coverage.</div></Card><div className="grid two" style={{marginTop:16}}><Card title="How is the energy mix changing?" sub="Unweighted country average · percentage of total energy"><Chart><LineChart data={trend}><CartesianGrid stroke="#edf1f2" vertical={false}/><XAxis dataKey="year" tick={{fontSize:10}}/><YAxis unit="%" tick={{fontSize:10}}/><Tooltip/><Legend/><Line dataKey="renewable" name="Renewables" stroke={colors.green} dot={false} strokeWidth={2}/><Line dataKey="fossil" name="Fossil fuels" stroke={colors.orange} dot={false} strokeWidth={2}/></LineChart></Chart></Card><Card title="How have reported CO₂ emissions changed?" sub="Sum across supplied countries · million tonnes CO₂"><Chart><AreaChart data={trend}><CartesianGrid stroke="#edf1f2" vertical={false}/><XAxis dataKey="year" tick={{fontSize:10}}/><YAxis tick={{fontSize:10}} width={50}/><Tooltip formatter={(v:any)=>fmt(v,0)+' Mt'}/><Area dataKey="emissions" name="CO₂ emissions" stroke={colors.blue} fill="#dceef3" dot={false}/></AreaChart></Chart></Card></div><Section title="Climate event activity" detail="Recorded events in the supplied file"/><EventBars data={data}/><Section title="Key intelligence" detail="Calculated from the competition datasets"/><div className="grid three"><div className="card insight"><strong>Renewables gained share across the observed country panel</strong><div className="evidence">{fmt(trend.at(-1)?.renewable,1)}% latest vs {fmt(trend[0]?.renewable,1)}% first year</div><p>Transition speed varies by country, making country-level scenario analysis more useful than a single global assumption.</p></div><div className="card insight"><strong>Fossil fuels remain material in the energy mix</strong><div className="evidence">{fmt(trend.at(-1)?.fossil,1)}% latest country average</div><p>Policy and capital allocation should consider the remaining fossil exposure alongside renewable growth.</p></div><div className="card insight"><strong>Carbon markets differ in currency and history</strong><div className="evidence">{data.markets.length} markets · {data.summary.carbonRows.toLocaleString()} daily observations</div><p>Compare each market within its own units before translating price movements into decisions.</p></div></div></>}
-function EventBars({data}:{data:Data}){const byYear=Array.from(new Set(data.events.map(e=>Number(e.date.slice(0,4))))).sort().map(year=>({year,policy:data.events.filter(e=>e.date.startsWith(String(year))&&e.is_policy).length,weather:data.events.filter(e=>e.date.startsWith(String(year))&&e.is_extreme_weather).length,disaster:data.events.filter(e=>e.date.startsWith(String(year))&&e.is_disaster).length}));return <Card title="What types of events were recorded?" sub="Annual counts · categories may overlap for an event"><Chart short><BarChart data={byYear}><CartesianGrid stroke="#edf1f2" vertical={false}/><XAxis dataKey="year" tick={{fontSize:10}}/><YAxis allowDecimals={false} tick={{fontSize:10}}/><Tooltip/><Legend/><Bar dataKey="policy" stackId="a" fill={colors.blue} name="Policy"/><Bar dataKey="weather" stackId="a" fill={colors.orange} name="Extreme weather"/><Bar dataKey="disaster" stackId="a" fill={colors.green} name="Disaster"/></BarChart></Chart></Card>}
-export function CarbonMarkets({data,market,setMarket}:{data:Data;market:string;setMarket:(x:string)=>void}){const c=data.carbon[market];return <><Title title="Carbon Market Forecasting" sub="Daily observed prices and market-specific risk signals." controls={<Select value={market} onChange={setMarket} options={data.markets}/>}/><div className="grid kpis"><Kpi label="Latest price" value={`${fmt(c.latest,2)} ${c.currency}`} detail={c.latestDate}/><Kpi label="30-day predicted price" value={`${fmt((c as any).forecast?.at(-1)?.price,2)} ${c.currency}`} detail="30th trading-day estimate"/><Kpi label="30-day movement" value={fmt((((c as any).forecast?.at(-1)?.price/c.latest)-1)*100,1)+"%"} detail="Forecast end vs latest observed"/><Kpi label="30-day historical volatility" value={c.volatility===null?'Unavailable':fmt(c.volatility,2)+'%'} detail="Standard deviation of daily returns"/></div><Card title={`${market.replaceAll('_',' ')} — observed price and 30-trading-day forecast`} sub={`Daily price in ${c.currency}; forecast boundary will appear when model outputs are exported`}><ForecastChart market={market} data={data}/><div className="note">Approximate bands use held-out one-step absolute errors scaled by forecast horizon. They do not guarantee multi-step coverage.</div></Card><div className="grid two" style={{marginTop:16}}><Card title="Price vs 30-day rolling average" sub={`Observed ${c.currency} per unit`}><Chart short><LineChart data={c.history.slice(-320)}><CartesianGrid stroke="#edf1f2" vertical={false}/><XAxis dataKey="date" minTickGap={55} tick={{fontSize:10}}/><YAxis domain={['auto','auto']} tick={{fontSize:10}}/><Tooltip/><Legend/><Line dataKey="price" stroke={colors.green} dot={false} name="Daily price"/><Line dataKey="rolling30" stroke={colors.orange} dot={false} name="30-day average"/></LineChart></Chart></Card><Card title="Rolling market volatility" sub="30-observation standard deviation of daily percentage returns"><Chart short><AreaChart data={c.history.slice(-320)}><CartesianGrid stroke="#edf1f2" vertical={false}/><XAxis dataKey="date" minTickGap={55} tick={{fontSize:10}}/><YAxis unit="%" tick={{fontSize:10}}/><Tooltip/><Area dataKey="volatility30" stroke={colors.blue} fill="#e1f0f4" name="Volatility %"/></AreaChart></Chart></Card></div><Card title="Forecast model summary" sub="Technical evidence required before release"><div className="grid three"><Kpi label="Algorithm" value="Random forest" detail={(c as any).model.train+" training"}/><Kpi label="RMSE / MAPE" value={fmt((c as any).model.rmse,2)+" / "+fmt((c as any).model.mape,1)+"%"} detail={(c as any).model.test+" test"}/><Kpi label="Horizon" value="30 days" detail="Target trading-day horizon"/></div></Card></>}
-export function Co2({data}:{data:Data}){const [feature,setFeature]=useState('coal_pct');const model=data.co2Model;const sample=data.countriesData.filter(x=>x.year===data.summary.latestYear);return <><Title title="What Drives CO₂ Emissions?" sub="Country-year energy mix and CO₂ per capita from the supplied files."/><div className="grid kpis"><Kpi label="Held-out model R²" value={model?fmt(model.r2,3):'Unavailable'} detail="2021–2026 test years"/><Kpi label="Held-out RMSE" value={model?fmt(model.rmse,3)+' t':'Unavailable'} detail="CO₂ per capita"/><Kpi label="Highest importance" value={model?.importance[0]?.feature.replace('_pct','')||'Unavailable'} detail="Random forest feature importance"/><Kpi label="Countries covered" value={String(data.summary.countryCount)} detail="Joined country-year panel"/></div><div className="grid two"><Card title="Actual vs predicted CO₂ per capita" sub="Held-out observations; points near the diagonal have lower error">{model?<Chart><ScatterChart><CartesianGrid stroke="#edf1f2"/><XAxis type="number" dataKey="actual" name="Actual" unit=" t" tick={{fontSize:10}}/><YAxis type="number" dataKey="predicted" name="Predicted" unit=" t" tick={{fontSize:10}}/><Tooltip cursor={{strokeDasharray:'3 3'}}/><Scatter data={model.predictions} fill={colors.green}/></ScatterChart></Chart>:<Empty>No evaluated model output.</Empty>}</Card><Card title="Energy mix vs CO₂ per capita" sub="Latest country observations; association is not causation"><Select value={feature} onChange={setFeature} options={['coal_pct','oil_pct','gas_pct','nuclear_pct','hydro_pct','solar_pct','wind_pct','renewables_total_pct']}/><Chart><ScatterChart><CartesianGrid stroke="#edf1f2"/><XAxis type="number" dataKey={feature} name={feature} unit="%" tick={{fontSize:10}}/><YAxis type="number" dataKey="co2_per_capita_t" name="CO₂ per capita" unit=" t" tick={{fontSize:10}}/><Tooltip cursor={{strokeDasharray:'3 3'}}/><Scatter data={sample} fill={colors.blue}/></ScatterChart></Chart></Card></div><div className="grid two"><Card title="Model feature importance" sub="Random forest impurity importance; interpret with correlated energy shares in mind">{model?.importance.map(x=><div className="barrow" key={x.feature}><label>{x.feature.replace('_pct','')}</label><div className="track"><div className="fill" style={{width:`${x.value*100}%`}}/></div><b>{fmt(x.value*100,1)}%</b></div>)}</Card><Card title="Regression methodology" sub="Country-year prediction of co2_per_capita_t"><div className="metricline"><span>Algorithm</span><strong>{model?.algorithm||'Pending'}</strong></div><div className="metricline"><span>Training</span><strong>{model?.train||'Pending'}</strong></div><div className="metricline"><span>Testing</span><strong>{model?.test||'Pending'}</strong></div><div className="metricline"><span>Inputs</span><strong>{model?.features.length||0} energy shares</strong></div><p className="sub">A chronological holdout prevents later years entering training. This is predictive association, not a causal estimate.</p></Card></div></>}
-export function Transition({data}:{data:Data}){const years=Array.from(new Set(data.countriesData.map(x=>x.year))).sort();const [year,setYear]=useState(years.at(-1)||2026);const [region,setRegion]=useState('All regions');const sample=data.countriesData.filter(x=>x.year===year&&(region==='All regions'||x.region===region));return <><Title title="Global Energy Transition" sub="Explore country pathways across the observed 2000–2026 panel." controls={<Select value={region} onChange={setRegion} options={['All regions',...data.regions]}/>}/><Card title="How do renewable shares relate to CO₂ per capita?" sub="Each point is a country · x: renewable energy share (%) · y: CO₂ per capita (t)"><div style={{display:'flex',alignItems:'center',gap:20,margin:'0 4px 20px'}}><strong style={{fontSize:20,color:colors.green}}>{year}</strong><input className="slider" type="range" min={years[0]} max={years.at(-1)} value={year} onChange={e=>setYear(Number(e.target.value))}/></div><Chart tall><ScatterChart><CartesianGrid stroke="#edf1f2"/><XAxis type="number" dataKey="renewables_total_pct" name="Renewables" unit="%" tick={{fontSize:10}}/><YAxis type="number" dataKey="co2_per_capita_t" name="CO₂ per capita" unit=" t" tick={{fontSize:10}}/><ZAxis dataKey="population_millions" range={[35,260]}/><Tooltip cursor={{strokeDasharray:'3 3'}} content={({active,payload})=>active&&payload?.length?<div className="tooltip" style={{padding:10}}>{(payload[0].payload as Row).country}<br/>Renewables: {fmt((payload[0].payload as Row).renewables_total_pct)}%<br/>CO₂ per capita: {fmt((payload[0].payload as Row).co2_per_capita_t)} t</div>:null}/><Scatter data={sample} fill={colors.green}/></ScatterChart></Chart><p className="sub">Bubble area reflects population in the supplied CO₂ dataset. Move the year slider to compare country positions.</p></Card><Section title="Observed transition archetypes" detail="Rules use first-to-last-year changes in each country"/><div className="grid three">{['Business-as-Usual','Moderate Transition','Accelerated Transition'].map(cat=><div className="card insight" key={cat}><strong>{cat}</strong><div className="evidence">{data.archetypes.filter(x=>x.category===cat).length} countries</div><p>{cat==='Accelerated Transition'?'Renewables rose at least 15 points and fossil share fell at least 10 points.':cat==='Moderate Transition'?'Renewables rose at least 5 points while fossil share declined.':'Countries outside the two observed transition thresholds.'}</p></div>)}</div><Card title="Country transition evidence" sub="Percentage-point change in shares; emissions change in Mt CO₂"><div className="tablewrap"><table className="table"><thead><tr><th>Country</th><th>Renewables Δ</th><th>Fossil Δ</th><th>CO₂ Δ</th><th>Category</th></tr></thead><tbody>{data.archetypes.map(x=><tr key={x.country}><td>{x.country}</td><td>{fmt(x.renewableChange)} pp</td><td>{fmt(x.fossilChange)} pp</td><td>{fmt(x.emissionsChange)} Mt</td><td><span className="pill">{x.category}</span></td></tr>)}</tbody></table></div></Card></>}
-export function Country({data,initialCountry}:{data:Data;initialCountry?:string}){const [country,setCountry]=useState(initialCountry||data.countries[0]);const rows=data.countriesData.filter(x=>x.country===country).sort((a,b)=>a.year-b.year);const last=rows.at(-1);const arch=data.archetypes.find(x=>x.country===country);return <><Title title="Country Explorer" sub="A country-level view of energy mix, emissions and transition progress." controls={<Select value={country} onChange={setCountry} options={data.countries}/>}/>{last&&<><div className="grid kpis"><Kpi label="CO₂ emissions" value={fmt(last.co2_emissions_mt)+' Mt'} detail={String(last.year)}/><Kpi label="CO₂ per capita" value={fmt(last.co2_per_capita_t,2)+' t'} detail="Tonnes per person"/><Kpi label="Renewables share" value={fmt(last.renewables_total_pct)+'%'} detail="Latest energy mix"/><Kpi label="Fossil share" value={fmt(last.fossil_total_pct)+'%'} detail="Latest energy mix"/></div><div className="grid two"><Card title={`${country} energy mix`} sub="Source share (%) from 2000 to latest year"><Chart><LineChart data={rows}><CartesianGrid stroke="#edf1f2" vertical={false}/><XAxis dataKey="year" tick={{fontSize:10}}/><YAxis unit="%" tick={{fontSize:10}}/><Tooltip/><Legend/><Line dataKey="coal_pct" name="Coal" stroke={colors.dark} dot={false}/><Line dataKey="oil_pct" name="Oil" stroke={colors.orange} dot={false}/><Line dataKey="gas_pct" name="Gas" stroke={colors.blue} dot={false}/><Line dataKey="renewables_total_pct" name="Renewables" stroke={colors.green} dot={false}/></LineChart></Chart></Card><Card title={`${country} CO₂ trajectory`} sub="Observed emissions (Mt CO₂)"><Chart><AreaChart data={rows}><CartesianGrid stroke="#edf1f2" vertical={false}/><XAxis dataKey="year" tick={{fontSize:10}}/><YAxis tick={{fontSize:10}}/><Tooltip/><Area dataKey="co2_emissions_mt" name="CO₂ emissions" stroke={colors.green} fill="#e0f0e8"/></AreaChart></Chart></Card></div><div className="grid two"><Card title="Latest country indicators"><div className="metricline"><span>Region</span><strong>{last.region}</strong></div><div className="metricline"><span>CO₂ intensity</span><strong>{fmt(last.co2_intensity_kg_per_gdp_usd,2)} kg / GDP USD</strong></div><div className="metricline"><span>Transition category</span><strong>{arch?.category||'Unavailable'}</strong></div><div className="metricline"><span>Observed range</span><strong>{rows[0].year}–{last.year}</strong></div></Card><Card title="2030 country outlook" sub="Scenario outputs"><CountryForecast data={data} country={country}/></Card></div></>}</>}
-export function Quality({data}:{data:Data}){return <><Title title="Data Quality & Provenance" sub="Five competition datasets; no external observations or pretrained weights."/><Card title="Dataset inventory" sub="Counts and ranges calculated directly from source CSVs"><div className="tablewrap"><table className="table"><thead><tr><th>Dataset</th><th>Rows</th><th>Columns</th><th>Missing cells</th><th>Range</th><th>Countries</th><th>Markets</th><th>Regions</th></tr></thead><tbody>{data.quality.map(x=><tr key={x.name}><td>{x.name}</td><td>{x.rows.toLocaleString()}</td><td>{x.columns}</td><td>{x.missing.toLocaleString()}</td><td>{x.start} – {x.end}</td><td>{x.countries??'—'}</td><td>{x.markets??'—'}</td><td>{x.regions??'—'}</td></tr>)}</tbody></table></div></Card><div style={{height:16}}/><Card title="Global temperature anomaly and atmospheric CO₂" sub="Monthly climate context from temperature_anomaly_monthly.csv"><Chart><LineChart data={data.temperature}><CartesianGrid stroke="#edf1f2" vertical={false}/><XAxis dataKey="year_month" minTickGap={65} tick={{fontSize:10}}/><YAxis yAxisId="a" unit="°C" tick={{fontSize:10}}/><YAxis yAxisId="b" orientation="right" unit="ppm" tick={{fontSize:10}}/><Tooltip/><Legend/><Line yAxisId="a" dataKey="temp_anomaly_c" name="Temperature anomaly °C" stroke={colors.orange} dot={false}/><Line yAxisId="b" dataKey="co2_ppm" name="CO₂ ppm" stroke={colors.blue} dot={false}/></LineChart></Chart></Card></>}
-export function Product(){return <><Title title="From Climate Data to Decision Intelligence" sub="One intelligence layer connecting carbon markets, climate events, emissions and energy transitions."/><div className="grid two"><Card title="The decision problem" sub="A fragmented evidence base creates slow, inconsistent climate decisions"><p>ESG analysts need comparable emissions evidence. Carbon-market participants need price and event context. Energy companies need transition signals. Policy teams need transparent scenario assumptions.</p></Card><Card title="Value proposition" sub="Traceable analytics for decisions"><p>CarbonScope connects the five supplied datasets in one workflow: observe market and climate signals, evaluate predictive models, compare country transitions, and review documented 2030 pathways.</p></Card></div><Section title="Product modules"/><div className="grid three">{[['Carbon Market Forecasting','Daily market context and evaluated price outlooks'],['Event Shock Intelligence','Dated climate and policy events with measured predictive value'],['CO₂ Driver Analytics','Energy mix variables linked to per-capita emissions'],['Transition Monitoring','Country movement across fossil and renewable shares'],['2030 Scenario Modelling','Transparent assumptions and comparable trajectories']].map(([a,b])=><Card key={a} title={a}><p className="sub">{b}</p></Card>)}</div><Section title="Customers & commercial model"/><div className="grid two"><Card title="Target customers"><p>ESG fund managers · sustainability teams · carbon traders · energy companies · government and regulatory bodies</p></Card><Card title="Potential monetization"><p>Professional SaaS · Enterprise SaaS · API access · institutional licensing</p><p className="sub">Commercial options are conceptual; no revenue projections are claimed.</p></Card></div><Section title="Solution architecture"/><Card title="From source data to decisions" sub="Analysis and model training happen outside the dashboard"><div className="architecture">{['Provided CSVs','Cleaning & validation','Feature engineering','Predictive & scenario models','Validated JSON outputs','Dashboard data layer','Decision makers'].map((x,i)=><span key={x}>{x}{i<6&&<em> →</em>}</span>)}</div><p className="sub">Modules: carbon forecasting · CO₂ regression · event experiment · transition analysis · 2030 scenarios.</p></Card></>}
-export function EventResults({data,market,setMarket}:{data:Data;market:string;setMarket:(x:string)=>void}){const result=(data as any).eventExperiment;const [kind,setKind]=useState('All');const events=data.events.filter(e=>kind==='All'||kind==='Policy'&&e.is_policy||kind==='Extreme Weather'&&e.is_extreme_weather||kind==='Disaster'&&e.is_disaster);return <><Title title="Do Climate Events Move Carbon Markets?" sub="A measured event-feature experiment and a dated event ledger." controls={<Select value={market} onChange={setMarket} options={data.markets}/>}/><div className="grid kpis"><Kpi label="EU ETS baseline RMSE" value={fmt(result.baseline.rmse,3)} detail="Price-history features"/><Kpi label="Event-aware RMSE" value={fmt(result.eventAware.rmse,3)} detail="Same split plus event counts"/><Kpi label="RMSE improvement" value={fmt(result.improvementPct,2)+'%'} detail="Negative means event features worsened RMSE"/><Kpi label="Event-aware MAPE" value={fmt(result.eventAware.mape,2)+'%'} detail="Held-out test period"/></div><div className="note">For EU ETS, event counts did not improve RMSE in this experiment ({fmt(result.improvementPct,2)}%). This result supports caution before treating recorded climate events as a trading signal.</div><div className="grid two"><Card title="Baseline vs event-aware predictive error" sub="EU ETS · lower RMSE is better · same chronological holdout"><Chart short><BarChart data={[{model:'Baseline',rmse:result.baseline.rmse},{model:'Event-aware',rmse:result.eventAware.rmse}]} layout="vertical"><CartesianGrid stroke="#edf1f2" horizontal={false}/><XAxis type="number" domain={[0,'auto']} tick={{fontSize:10}}/><YAxis type="category" dataKey="model" width={90} tick={{fontSize:10}}/><Tooltip/><Bar dataKey="rmse" name="RMSE" fill={colors.green}/></BarChart></Chart></Card><Card title="Experiment design" sub="Cross-dataset feature engineering"><div className="metricline"><span>Market</span><strong>EU ETS</strong></div><div className="metricline"><span>Training</span><strong>{result.train}</strong></div><div className="metricline"><span>Testing</span><strong>{result.test}</strong></div><p className="sub">{result.scope}</p><p className="sub">Features: {result.features.join(', ')}. Model: random forest autoregression.</p></Card></div><Card title={`${market.replaceAll('_',' ')} prices with event context`} sub="Prices are market-specific; the event ledger below includes all supplied regions"><EventPriceChart market={market} data={data}/><div className="tabs">{['All','Policy','Extreme Weather','Disaster'].map(x=><button key={x} className={kind===x?'active':''} onClick={()=>setKind(x)}>{x}</button>)}</div><div className="tablewrap" style={{maxHeight:340,overflow:'auto'}}><table className="table"><thead><tr><th>Date</th><th>Region</th><th>Type</th><th>Severity</th><th>Policy</th><th>Weather</th><th>Disaster</th><th>Event</th></tr></thead><tbody>{events.map((e,i)=><tr key={i}><td>{e.date}</td><td>{e.region}</td><td>{e.event_type}</td><td>{e.severity_score}</td><td>{e.is_policy?'Yes':'No'}</td><td>{e.is_extreme_weather?'Yes':'No'}</td><td>{e.is_disaster?'Yes':'No'}</td><td>{e.description}</td></tr>)}</tbody></table></div></Card></>}
-function ScenarioResults({data}:{data:Data}){const [country,setCountry]=useState(data.countries[0]);const [selected,setSelected]=useState('Business-as-Usual');const scenarios=(data as any).scenarios[country];const history=data.countriesData.filter(x=>x.country===country).sort((a,b)=>a.year-b.year);const names=['Business-as-Usual','Moderate Transition','Accelerated Transition'];const last=history.at(-1);const end=scenarios[selected].forecast.at(-1).co2_emissions_mt;const bau=scenarios['Business-as-Usual'].forecast.at(-1).co2_emissions_mt;const combined=history.map(x=>({year:x.year,observed:x.co2_emissions_mt})).concat(Array.from({length:5},(_,i)=>{const year=2026+i;const row:any={year};for(const name of names)row[name]=scenarios[name].forecast[i].co2_emissions_mt;return row}));return <><Title title="2030 Scenario Lab" sub="Empirical analogue pathways derived from observed country transitions." controls={<><Select value={country} onChange={setCountry} options={data.countries}/><Select value={selected} onChange={setSelected} options={names}/></>}/><div className="grid kpis"><Kpi label="2026 observed emissions" value={fmt(last?.co2_emissions_mt)+' Mt'} detail={country}/><Kpi label="2030 projected emissions" value={fmt(end)+' Mt'} detail={selected}/><Kpi label="Change vs 2026" value={fmt((end/(last?.co2_emissions_mt||1)-1)*100,1)+'%'} detail="Selected pathway"/><Kpi label="Difference vs BAU" value={fmt(end-bau)+' Mt'} detail="Negative = lower than BAU"/></div><Card title={`${country} — observed emissions and 2030 pathways`} sub="Solid green: observed 2000–2026 · other lines: scenario projections 2026–2030"><Chart tall><LineChart data={combined}><CartesianGrid stroke="#edf1f2" vertical={false}/><XAxis dataKey="year" tick={{fontSize:10}}/><YAxis tick={{fontSize:10}} width={55} unit=" Mt"/><Tooltip formatter={(v:any)=>fmt(Number(v))+' Mt'}/><Legend/><ReferenceLine x={2026} stroke="#81969d" strokeDasharray="4 4" label={{value:'Projection begins',fontSize:10,position:'top'}}/><Line dataKey="observed" name="Observed data" stroke={colors.green} strokeWidth={2.5} dot={false}/><Line dataKey="Business-as-Usual" name="BAU scenario" stroke={colors.dark} strokeDasharray="5 3" dot={false}/><Line dataKey="Moderate Transition" name="Moderate scenario" stroke={colors.blue} strokeDasharray="5 3" dot={false}/><Line dataKey="Accelerated Transition" name="Accelerated scenario" stroke={colors.orange} strokeDasharray="5 3" dot={false}/></LineChart></Chart></Card><Section title="Model assumptions" detail="Annual rates derived from 2016–2026 observations"/><div className="grid three">{names.map(name=>{const a=scenarios[name].assumptions;return <Card key={name} title={name} sub={name===selected?'Selected pathway':'Alternative pathway'}><div className="metricline"><span>Renewable share</span><strong>{fmt(a.renewablePpPerYear,3)} pp / year</strong></div><div className="metricline"><span>Fossil share</span><strong>{fmt(a.fossilPpPerYear,3)} pp / year</strong></div><div className="metricline"><span>Emissions</span><strong>{fmt(a.emissionsGrowthPct,3)}% / year</strong></div><div className="metricline"><span>2030 emissions</span><strong>{fmt(scenarios[name].forecast.at(-1).co2_emissions_mt)} Mt</strong></div></Card>})}</div><div className="note">{(data as any).scenarioMethod} These are scenario analogues, not causal policy impact estimates.</div></>}
-function CountryForecast({data,country}:{data:Data;country:string}){const s=(data as any).scenarios[country];const rows=Array.from({length:5},(_,i)=>({year:2026+i,bau:s['Business-as-Usual'].forecast[i].co2_emissions_mt,moderate:s['Moderate Transition'].forecast[i].co2_emissions_mt,accelerated:s['Accelerated Transition'].forecast[i].co2_emissions_mt}));return <Chart short><LineChart data={rows}><CartesianGrid stroke="#edf1f2" vertical={false}/><XAxis dataKey="year" tick={{fontSize:10}}/><YAxis tick={{fontSize:10}}/><Tooltip formatter={(v:any)=>fmt(Number(v))+' Mt'}/><Legend/><Line dataKey="bau" name="BAU" stroke={colors.dark} dot={false}/><Line dataKey="moderate" name="Moderate" stroke={colors.blue} dot={false}/><Line dataKey="accelerated" name="Accelerated" stroke={colors.orange} dot={false}/></LineChart></Chart>}
-export function PerformanceResults({data}:{data:Data}){const m=data.co2Model;const e=(data as any).eventExperiment;const markets=Object.entries(data.carbon);return <><Title title="Model Performance" sub="Held-out scores, model scope and scenario methodology in one evidence ledger."/><div className="grid two"><Card title="01 / Carbon price forecasting" sub="Random forest autoregression · chronological 80/20 holdout"><div className="tablewrap"><table className="table"><thead><tr><th>Market</th><th>RMSE</th><th>MAPE</th><th>Test period</th></tr></thead><tbody>{markets.map(([name,value])=><tr key={name}><td>{name}</td><td>{fmt((value as any).model.rmse,3)} {value.currency}</td><td>{fmt((value as any).model.mape,2)}%</td><td>{(value as any).model.test}</td></tr>)}</tbody></table></div><p className="sub">Inputs: lagged prices at 1, 2, 5 and 10 days, plus 5- and 20-day averages. Horizon: 30 trading days, recursively predicted.</p></Card><Card title="02 / CO₂ per capita regression" sub="Random forest · 2000–2020 train / 2021–2026 test"><div className="metricline"><span>R²</span><strong>{fmt(m?.r2,3)}</strong></div><div className="metricline"><span>RMSE</span><strong>{fmt(m?.rmse,3)} t/person</strong></div><p className="sub">Inputs: {m?.features.join(', ')}. The modest R² is reported without adjustment.</p></Card><Card title="04 / 2026–2030 scenarios" sub="Empirical analogue projection, not a trained causal model"><p>{(data as any).scenarioMethod}</p><p className="sub">Historical category thresholds and all assumptions are visible in the Transition and Scenario pages.</p></Card></div></>}
-export default function Dashboard(){const [data,setData]=useState<Data|null>(null);const [error,setError]=useState('');const [page,setPage]=useState('Overview');const [market,setMarket]=useState('');const [assistantOpen,setAssistantOpen]=useState(false);useEffect(()=>{fetch('/data/dashboard.json').then(r=>{if(!r.ok)throw new Error('Dataset export is missing');return r.json()}).then((d:Data)=>{setData(d);setMarket(d.markets[0]||'')}).catch(e=>setError(String(e)))},[]);return <div className="shell"><aside className="sidebar"><div className="brand">◈ CarbonScope<small>Intelligence platform</small></div><nav className="nav">{nav.map(([label,Icon])=><button key={label} className={page===label?'active':''} onClick={()=>setPage(label)}><Icon size={16}/>{label}</button>)}</nav><div className="sidefoot"><span className="dot"/>Competition dataset loaded<br/>CodeFest Datathon 2026</div></aside><div className="main"><header className="topbar"><strong>{page}</strong><div className="topright"><button type="button" className="assistant-launch" onClick={()=>setAssistantOpen(true)}><MessageCircle size={15}/><span>Ask assistant</span></button><span>Last data year: {data?.summary.latestYear||'—'}</span><span className="status"><span className="dot"/>{error?'Data error':data?'Data ready':'Loading'}</span></div></header><main className="content">{error?<Empty>{error}. Run build_data.py from the repository root.</Empty>:!data||!market?<Empty>Loading validated dataset export…</Empty>:page==='Overview'?<Overview data={data} market={market} setMarket={setMarket}/>:page==='Carbon Markets'?<CarbonMarkets data={data} market={market} setMarket={setMarket}/>:page==='Climate Event Impact'?<EventResults data={data} market={market} setMarket={setMarket}/>:page==='CO₂ Intelligence'?<Co2 data={data}/>:page==='Energy Transition'?<Transition data={data}/>:page==='2030 Scenario Lab'?<ScenarioResults data={data}/>:page==='Country Explorer'?<Country data={data}/>:page==='Model Performance'?<PerformanceResults data={data}/>:page==='Data Quality'?<Quality data={data}/>:<Product/>}<div className="footer">CarbonScope Intelligence · CodeFest Datathon 2026 · Source: supplied competition CSV datasets</div></main></div>{data&&<AssistantPanel data={data as unknown as DashboardData} open={assistantOpen} onClose={()=>setAssistantOpen(false)}/>}</div>}
-
-
+'use client'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ComposedChart,
+  Legend,
+  Line,
+  LineChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Scatter,
+  ScatterChart,
+  Tooltip,
+  XAxis,
+  YAxis,
+  ZAxis,
+} from 'recharts'
+import {
+  Activity,
+  BarChart3,
+  BookOpen,
+  BriefcaseBusiness,
+  CloudSun,
+  Database,
+  Earth,
+  FlaskConical,
+  Gauge,
+  Globe2,
+  LayoutDashboard,
+  Leaf,
+  LineChart as LineIcon,
+  Menu,
+  MessageCircle,
+  ShieldCheck,
+  TrendingUp,
+} from 'lucide-react'
+import { Card as UiCard } from '@/components/ui/card'
+import AssistantPanel from '@/components/assistant/AssistantPanel'
+import type { DashboardData } from '@/lib/assistant/types'
+type Row = {
+  year: number
+  country: string
+  region: string
+  co2_emissions_mt: number
+  co2_per_capita_t: number
+  co2_intensity_kg_per_gdp_usd: number
+  population_millions: number
+  coal_pct: number
+  oil_pct: number
+  gas_pct: number
+  nuclear_pct: number
+  hydro_pct: number
+  solar_pct: number
+  wind_pct: number
+  other_renewables_pct: number
+  renewables_total_pct: number
+  fossil_total_pct: number
+}
+type Point = { date: string; price: number; rolling30: number; volatility30: number | null }
+type Data = {
+  markets: string[]
+  countries: string[]
+  regions: string[]
+  carbon: Record<
+    string,
+    {
+      currency: string
+      history: Point[]
+      latest: number
+      latestDate: string
+      volatility: number | null
+    }
+  >
+  events: {
+    date: string
+    region: string
+    event_type: string
+    severity_score: number
+    description: string
+    is_policy: number
+    is_extreme_weather: number
+    is_disaster: number
+  }[]
+  countriesData: Row[]
+  temperature: { year_month: string; temp_anomaly_c: number; co2_ppm: number | null }[]
+  archetypes: {
+    country: string
+    renewableChange: number
+    fossilChange: number
+    emissionsChange: number
+    category: string
+    firstYear: number
+    lastYear: number
+  }[]
+  co2Model?: {
+    algorithm: string
+    features: string[]
+    target: string
+    train: string
+    test: string
+    r2: number
+    rmse: number
+    predictions: { actual: number; predicted: number; country: string; year: number }[]
+    importance: { feature: string; value: number }[]
+  }
+  quality: {
+    name: string
+    rows: number
+    columns: number
+    missing: number
+    start: string
+    end: string
+    countries: number | null
+    markets: number | null
+    regions: number | null
+  }[]
+  summary: {
+    carbonRows: number
+    eventCount: number
+    countryCount: number
+    latestYear: number
+    globalTemperatureLatest: { year_month: string; temp_anomaly_c: number }
+  }
+}
+const nav = [
+  ['Overview', LayoutDashboard],
+  ['Carbon Markets', LineIcon],
+  ['Climate Event Impact', CloudSun],
+  ['CO₂ Intelligence', Activity],
+  ['Energy Transition', Leaf],
+  ['2030 Scenario Lab', FlaskConical],
+  ['Country Explorer', Globe2],
+  ['Model Performance', Gauge],
+  ['Product / Business Case', BriefcaseBusiness],
+  ['Data Quality', Database],
+] as const
+const colors = {
+  green: '#2b8c69',
+  blue: '#2782a1',
+  orange: '#d99645',
+  dark: '#173b48',
+  light: '#b9d8ce',
+}
+const fmt = (n: number | undefined, d = 1) =>
+  typeof n === 'number' && Number.isFinite(n)
+    ? n.toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d })
+    : 'Unavailable'
+function Card({
+  title,
+  sub,
+  children,
+  className = '',
+}: {
+  title: string
+  sub?: string
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <UiCard className={className}>
+      <h2>{title}</h2>
+      {sub && <p className="sub">{sub}</p>}
+      {children}
+    </UiCard>
+  )
+}
+function Kpi({ label, value, detail }: { label: string; value: string; detail: string }) {
+  return (
+    <div className="card kpi">
+      <div className="label">{label}</div>
+      <div className="value">{value}</div>
+      <div className="detail">{detail}</div>
+    </div>
+  )
+}
+function Empty({ children }: { children: React.ReactNode }) {
+  return <div className="empty">{children}</div>
+}
+function Chart({
+  children,
+  tall = false,
+  short = false,
+}: {
+  children: React.ReactNode
+  tall?: boolean
+  short?: boolean
+}) {
+  return (
+    <div className={'chart ' + (tall ? 'tall ' : '') + (short ? 'short' : '')}>
+      <ResponsiveContainer width="100%" height="100%">
+        {children as React.ReactElement}
+      </ResponsiveContainer>
+    </div>
+  )
+}
+function Select({
+  value,
+  onChange,
+  options,
+}: {
+  value: string
+  onChange: (s: string) => void
+  options: string[]
+}) {
+  return (
+    <select className="select" value={value} onChange={(e) => onChange(e.target.value)}>
+      {options.map((x) => (
+        <option key={x}>{x}</option>
+      ))}
+    </select>
+  )
+}
+function Title({
+  title,
+  sub,
+  controls,
+}: {
+  title: string
+  sub: string
+  controls?: React.ReactNode
+}) {
+  return (
+    <div className="pagehead">
+      <div>
+        <div className="eyebrow">Monsoon Mandate / Helios Pane</div>
+        <h1>{title}</h1>
+        <p>{sub}</p>
+      </div>
+      {controls && <div className="controls">{controls}</div>}
+    </div>
+  )
+}
+function Section({ title, detail }: { title: string; detail?: string }) {
+  return (
+    <div className="section">
+      <h2>{title}</h2>
+      <span>{detail}</span>
+    </div>
+  )
+}
+function CarbonChart({ market, data }: { market: string; data: Data }) {
+  const c = data.carbon[market]
+  const points = c?.history.slice(-450) || []
+  return (
+    <Chart tall>
+      <ComposedChart data={points} margin={{ top: 8, right: 10, bottom: 6, left: 0 }}>
+        <CartesianGrid stroke="#edf1f2" vertical={false} />
+        <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={55} />
+        <YAxis tick={{ fontSize: 10 }} width={48} domain={['auto', 'auto']} />
+        <Tooltip
+          contentStyle={{ fontSize: 11 }}
+          formatter={(v: any) => [fmt(v, 2) + ' ' + c.currency, 'Price']}
+        />
+        <Legend />
+        <Area
+          type="monotone"
+          dataKey="price"
+          name="Observed carbon price"
+          stroke={colors.green}
+          fill="#dff0e8"
+          strokeWidth={2}
+          fillOpacity={0.5}
+          dot={false}
+        />
+      </ComposedChart>
+    </Chart>
+  )
+}
+function ForecastChart({ market, data }: { market: string; data: Data }) {
+  const c = data.carbon[market] as any
+  const history = c.history.slice(-160).map((p: Point) => ({ date: p.date, observed: p.price }))
+  const boundary = history.at(-1)
+  const forecast = c.forecast || []
+  const points = [
+    ...history,
+    ...(boundary ? [{ date: boundary.date, forecast: boundary.observed }] : []),
+    ...forecast.map((p: any) => ({
+      date: p.date,
+      forecast: p.price,
+      lower: p.lower,
+      upper: p.upper,
+    })),
+  ]
+  return (
+    <Chart tall>
+      <ComposedChart data={points}>
+        <CartesianGrid stroke="#edf1f2" vertical={false} />
+        <XAxis dataKey="date" minTickGap={52} tick={{ fontSize: 10 }} />
+        <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10 }} width={48} />
+        <Tooltip formatter={(v: any, name: any) => [fmt(Number(v), 2) + ' ' + c.currency, name]} />
+        <Legend />
+        <ReferenceLine
+          x={boundary?.date}
+          stroke="#8aa0a8"
+          strokeDasharray="4 4"
+          label={{ value: 'Forecast starts', fontSize: 10, position: 'top' }}
+        />
+        <Line
+          dataKey="observed"
+          name="Observed price"
+          stroke={colors.green}
+          strokeWidth={2}
+          dot={false}
+        />
+        <Line
+          dataKey="forecast"
+          name="30-day forecast"
+          stroke={colors.blue}
+          strokeWidth={2.5}
+          dot={false}
+        />
+        <Line
+          dataKey="lower"
+          name="Approx. lower band"
+          stroke={colors.light}
+          strokeDasharray="4 4"
+          dot={false}
+        />
+        <Line
+          dataKey="upper"
+          name="Approx. upper band"
+          stroke={colors.light}
+          strokeDasharray="4 4"
+          dot={false}
+        />
+      </ComposedChart>
+    </Chart>
+  )
+}
+function EventPriceChart({ market, data }: { market: string; data: Data }) {
+  const source = data.carbon[market].history
+  const marks = data.events.filter((e) => e.date >= source[0].date && e.date <= source.at(-1)!.date)
+  const points = source.map((p) => ({
+    ...p,
+    policyMarker: null as number | null,
+    weatherMarker: null as number | null,
+    disasterMarker: null as number | null,
+    otherMarker: null as number | null,
+    eventDetails: [] as string[],
+  }))
+  for (const e of marks) {
+    const i = points.findIndex((p) => p.date >= e.date)
+    if (i < 0) continue
+    const key = e.is_policy
+      ? 'policyMarker'
+      : e.is_extreme_weather
+        ? 'weatherMarker'
+        : e.is_disaster
+          ? 'disasterMarker'
+          : 'otherMarker'
+    ;(points[i] as any)[key] = points[i].price
+    points[i].eventDetails.push(
+      `${e.date} · ${e.region} · ${e.event_type} · severity ${e.severity_score}: ${e.description}`,
+    )
+  }
+  return (
+    <Chart tall>
+      <ComposedChart data={points}>
+        <CartesianGrid stroke="#edf1f2" vertical={false} />
+        <XAxis dataKey="date" minTickGap={60} tick={{ fontSize: 10 }} />
+        <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10 }} width={48} />
+        <Tooltip
+          content={({ active, payload, label }) =>
+            active && payload?.length ? (
+              <div className="tooltip" style={{ padding: 10, maxWidth: 280 }}>
+                <strong>{label}</strong>
+                <div>
+                  {fmt(Number(payload[0]?.payload?.price), 2)} {data.carbon[market].currency}
+                </div>
+                {(payload[0]?.payload?.eventDetails || []).map((x: string) => (
+                  <div key={x} style={{ marginTop: 6 }}>
+                    {x}
+                  </div>
+                ))}
+              </div>
+            ) : null
+          }
+        />
+        <Legend />
+        <Line
+          dataKey="price"
+          name="Observed price"
+          stroke={colors.green}
+          dot={false}
+          strokeWidth={2}
+        />
+        <Scatter dataKey="policyMarker" name="Policy" fill={colors.blue} />
+        <Scatter dataKey="weatherMarker" name="Extreme weather" fill={colors.orange} />
+        <Scatter dataKey="disasterMarker" name="Disaster" fill="#b74e5a" />
+        <Scatter dataKey="otherMarker" name="Other event" fill="#8b7ca9" />
+      </ComposedChart>
+    </Chart>
+  )
+}
+export function Overview({
+  data,
+  market,
+  setMarket,
+}: {
+  data: Data
+  market: string
+  setMarket: (x: string) => void
+}) {
+  const latest = data.countriesData.filter((x) => x.year === data.summary.latestYear)
+  const renew = latest.length
+    ? latest.reduce((a, b) => a + b.renewables_total_pct, 0) / latest.length
+    : 0
+  const global = data.countriesData.filter((x) => x.country === 'World' || x.country === 'Global')
+  const years = Array.from(new Set(data.countriesData.map((x) => x.year))).sort()
+  const trend = years.map((year) => {
+    const rows = data.countriesData.filter((x) => x.year === year)
+    return {
+      year,
+      renewable: rows.reduce((a, b) => a + b.renewables_total_pct, 0) / rows.length,
+      fossil: rows.reduce((a, b) => a + b.fossil_total_pct, 0) / rows.length,
+      emissions: rows.reduce((a, b) => a + b.co2_emissions_mt, 0),
+    }
+  })
+  const c = data.carbon[market]
+  return (
+    <>
+      <Title
+        title="Climate & Energy Intelligence Overview"
+        sub="Data-driven insights across carbon markets, emissions and the global energy transition."
+        controls={<Select value={market} onChange={setMarket} options={data.markets} />}
+      />
+      <div className="grid kpis">
+        <Kpi
+          label={market.replaceAll('_', ' ') + ' carbon price'}
+          value={c ? `${fmt(c.latest, 2)} ${c.currency}` : 'Unavailable'}
+          detail={c?.latestDate || 'No source data'}
+        />
+        <Kpi
+          label="Average renewable share"
+          value={fmt(renew, 1) + '%'}
+          detail={`${data.summary.latestYear} · unweighted country average`}
+        />
+        <Kpi
+          label="Countries analyzed"
+          value={String(data.summary.countryCount)}
+          detail="CO₂ and energy mix datasets"
+        />
+        <Kpi
+          label="Climate events"
+          value={String(data.summary.eventCount)}
+          detail="Supplied event records"
+        />
+      </div>
+      <Card
+        title={`${market.replaceAll('_', ' ')} carbon price history`}
+        sub="Observed daily prices · 30-trading-day model forecast · chronological held-out evaluation"
+      >
+        <ForecastChart market={market} data={data} />
+        <div className="note">
+          The forecast is a recursive random forest estimate. Bands approximate uncertainty from
+          one-step test errors and are not calibrated for 30-step coverage.
+        </div>
+      </Card>
+      <div className="grid two" style={{ marginTop: 16 }}>
+        <Card
+          title="How is the energy mix changing?"
+          sub="Unweighted country average · percentage of total energy"
+        >
+          <Chart>
+            <LineChart data={trend}>
+              <CartesianGrid stroke="#edf1f2" vertical={false} />
+              <XAxis dataKey="year" tick={{ fontSize: 10 }} />
+              <YAxis unit="%" tick={{ fontSize: 10 }} />
+              <Tooltip />
+              <Legend />
+              <Line
+                dataKey="renewable"
+                name="Renewables"
+                stroke={colors.green}
+                dot={false}
+                strokeWidth={2}
+              />
+              <Line
+                dataKey="fossil"
+                name="Fossil fuels"
+                stroke={colors.orange}
+                dot={false}
+                strokeWidth={2}
+              />
+            </LineChart>
+          </Chart>
+        </Card>
+        <Card
+          title="How have reported CO₂ emissions changed?"
+          sub="Sum across supplied countries · million tonnes CO₂"
+        >
+          <Chart>
+            <AreaChart data={trend}>
+              <CartesianGrid stroke="#edf1f2" vertical={false} />
+              <XAxis dataKey="year" tick={{ fontSize: 10 }} />
+              <YAxis tick={{ fontSize: 10 }} width={50} />
+              <Tooltip formatter={(v: any) => fmt(v, 0) + ' Mt'} />
+              <Area
+                dataKey="emissions"
+                name="CO₂ emissions"
+                stroke={colors.blue}
+                fill="#dceef3"
+                dot={false}
+              />
+            </AreaChart>
+          </Chart>
+        </Card>
+      </div>
+      <Section title="Climate event activity" detail="Recorded events in the supplied file" />
+      <EventBars data={data} />
+      <Section title="Key intelligence" detail="Calculated from the competition datasets" />
+      <div className="grid three">
+        <div className="card insight">
+          <strong>Renewables gained share across the observed country panel</strong>
+          <div className="evidence">
+            {fmt(trend.at(-1)?.renewable, 1)}% latest vs {fmt(trend[0]?.renewable, 1)}% first year
+          </div>
+          <p>
+            Transition speed varies by country, making country-level scenario analysis more useful
+            than a single global assumption.
+          </p>
+        </div>
+        <div className="card insight">
+          <strong>Fossil fuels remain material in the energy mix</strong>
+          <div className="evidence">{fmt(trend.at(-1)?.fossil, 1)}% latest country average</div>
+          <p>
+            Policy and capital allocation should consider the remaining fossil exposure alongside
+            renewable growth.
+          </p>
+        </div>
+        <div className="card insight">
+          <strong>Carbon markets differ in currency and history</strong>
+          <div className="evidence">
+            {data.markets.length} markets · {data.summary.carbonRows.toLocaleString()} daily
+            observations
+          </div>
+          <p>
+            Compare each market within its own units before translating price movements into
+            decisions.
+          </p>
+        </div>
+      </div>
+    </>
+  )
+}
+function EventBars({ data }: { data: Data }) {
+  const byYear = Array.from(new Set(data.events.map((e) => Number(e.date.slice(0, 4)))))
+    .sort()
+    .map((year) => ({
+      year,
+      policy: data.events.filter((e) => e.date.startsWith(String(year)) && e.is_policy).length,
+      weather: data.events.filter((e) => e.date.startsWith(String(year)) && e.is_extreme_weather)
+        .length,
+      disaster: data.events.filter((e) => e.date.startsWith(String(year)) && e.is_disaster).length,
+    }))
+  return (
+    <Card
+      title="What types of events were recorded?"
+      sub="Annual counts · categories may overlap for an event"
+    >
+      <Chart short>
+        <BarChart data={byYear}>
+          <CartesianGrid stroke="#edf1f2" vertical={false} />
+          <XAxis dataKey="year" tick={{ fontSize: 10 }} />
+          <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+          <Tooltip />
+          <Legend />
+          <Bar dataKey="policy" stackId="a" fill={colors.blue} name="Policy" />
+          <Bar dataKey="weather" stackId="a" fill={colors.orange} name="Extreme weather" />
+          <Bar dataKey="disaster" stackId="a" fill={colors.green} name="Disaster" />
+        </BarChart>
+      </Chart>
+    </Card>
+  )
+}
+export function CarbonMarkets({
+  data,
+  market,
+  setMarket,
+}: {
+  data: Data
+  market: string
+  setMarket: (x: string) => void
+}) {
+  const c = data.carbon[market]
+  return (
+    <>
+      <Title
+        title="Carbon Market Forecasting"
+        sub="Daily observed prices and market-specific risk signals."
+        controls={<Select value={market} onChange={setMarket} options={data.markets} />}
+      />
+      <div className="grid kpis">
+        <Kpi
+          label="Latest price"
+          value={`${fmt(c.latest, 2)} ${c.currency}`}
+          detail={c.latestDate}
+        />
+        <Kpi
+          label="30-day predicted price"
+          value={`${fmt((c as any).forecast?.at(-1)?.price, 2)} ${c.currency}`}
+          detail="30th trading-day estimate"
+        />
+        <Kpi
+          label="30-day movement"
+          value={fmt(((c as any).forecast?.at(-1)?.price / c.latest - 1) * 100, 1) + '%'}
+          detail="Forecast end vs latest observed"
+        />
+        <Kpi
+          label="30-day historical volatility"
+          value={c.volatility === null ? 'Unavailable' : fmt(c.volatility, 2) + '%'}
+          detail="Standard deviation of daily returns"
+        />
+      </div>
+      <Card
+        title={`${market.replaceAll('_', ' ')} — observed price and 30-trading-day forecast`}
+        sub={`Daily price in ${c.currency}; forecast boundary will appear when model outputs are exported`}
+      >
+        <ForecastChart market={market} data={data} />
+        <div className="note">
+          Approximate bands use held-out one-step absolute errors scaled by forecast horizon. They
+          do not guarantee multi-step coverage.
+        </div>
+      </Card>
+      <div className="grid two" style={{ marginTop: 16 }}>
+        <Card title="Price vs 30-day rolling average" sub={`Observed ${c.currency} per unit`}>
+          <Chart short>
+            <LineChart data={c.history.slice(-320)}>
+              <CartesianGrid stroke="#edf1f2" vertical={false} />
+              <XAxis dataKey="date" minTickGap={55} tick={{ fontSize: 10 }} />
+              <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10 }} />
+              <Tooltip />
+              <Legend />
+              <Line dataKey="price" stroke={colors.green} dot={false} name="Daily price" />
+              <Line dataKey="rolling30" stroke={colors.orange} dot={false} name="30-day average" />
+            </LineChart>
+          </Chart>
+        </Card>
+        <Card
+          title="Rolling market volatility"
+          sub="30-observation standard deviation of daily percentage returns"
+        >
+          <Chart short>
+            <AreaChart data={c.history.slice(-320)}>
+              <CartesianGrid stroke="#edf1f2" vertical={false} />
+              <XAxis dataKey="date" minTickGap={55} tick={{ fontSize: 10 }} />
+              <YAxis unit="%" tick={{ fontSize: 10 }} />
+              <Tooltip />
+              <Area
+                dataKey="volatility30"
+                stroke={colors.blue}
+                fill="#e1f0f4"
+                name="Volatility %"
+              />
+            </AreaChart>
+          </Chart>
+        </Card>
+      </div>
+      <Card title="Forecast model summary" sub="Technical evidence required before release">
+        <div className="grid three">
+          <Kpi
+            label="Algorithm"
+            value="Random forest"
+            detail={(c as any).model.train + ' training'}
+          />
+          <Kpi
+            label="RMSE / MAPE"
+            value={fmt((c as any).model.rmse, 2) + ' / ' + fmt((c as any).model.mape, 1) + '%'}
+            detail={(c as any).model.test + ' test'}
+          />
+          <Kpi label="Horizon" value="30 days" detail="Target trading-day horizon" />
+        </div>
+      </Card>
+    </>
+  )
+}
+export function Co2({ data }: { data: Data }) {
+  const [feature, setFeature] = useState('coal_pct')
+  const model = data.co2Model
+  const sample = data.countriesData.filter((x) => x.year === data.summary.latestYear)
+  return (
+    <>
+      <Title
+        title="What Drives CO₂ Emissions?"
+        sub="Country-year energy mix and CO₂ per capita from the supplied files."
+      />
+      <div className="grid kpis">
+        <Kpi
+          label="Held-out model R²"
+          value={model ? fmt(model.r2, 3) : 'Unavailable'}
+          detail="2021–2026 test years"
+        />
+        <Kpi
+          label="Held-out RMSE"
+          value={model ? fmt(model.rmse, 3) + ' t' : 'Unavailable'}
+          detail="CO₂ per capita"
+        />
+        <Kpi
+          label="Highest importance"
+          value={model?.importance[0]?.feature.replace('_pct', '') || 'Unavailable'}
+          detail="Random forest feature importance"
+        />
+        <Kpi
+          label="Countries covered"
+          value={String(data.summary.countryCount)}
+          detail="Joined country-year panel"
+        />
+      </div>
+      <div className="grid two">
+        <Card
+          title="Actual vs predicted CO₂ per capita"
+          sub="Held-out observations; points near the diagonal have lower error"
+        >
+          {model ? (
+            <Chart>
+              <ScatterChart>
+                <CartesianGrid stroke="#edf1f2" />
+                <XAxis
+                  type="number"
+                  dataKey="actual"
+                  name="Actual"
+                  unit=" t"
+                  tick={{ fontSize: 10 }}
+                />
+                <YAxis
+                  type="number"
+                  dataKey="predicted"
+                  name="Predicted"
+                  unit=" t"
+                  tick={{ fontSize: 10 }}
+                />
+                <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+                <Scatter data={model.predictions} fill={colors.green} />
+              </ScatterChart>
+            </Chart>
+          ) : (
+            <Empty>No evaluated model output.</Empty>
+          )}
+        </Card>
+        <Card
+          title="Energy mix vs CO₂ per capita"
+          sub="Latest country observations; association is not causation"
+        >
+          <Select
+            value={feature}
+            onChange={setFeature}
+            options={[
+              'coal_pct',
+              'oil_pct',
+              'gas_pct',
+              'nuclear_pct',
+              'hydro_pct',
+              'solar_pct',
+              'wind_pct',
+              'renewables_total_pct',
+            ]}
+          />
+          <Chart>
+            <ScatterChart>
+              <CartesianGrid stroke="#edf1f2" />
+              <XAxis
+                type="number"
+                dataKey={feature}
+                name={feature}
+                unit="%"
+                tick={{ fontSize: 10 }}
+              />
+              <YAxis
+                type="number"
+                dataKey="co2_per_capita_t"
+                name="CO₂ per capita"
+                unit=" t"
+                tick={{ fontSize: 10 }}
+              />
+              <Tooltip cursor={{ strokeDasharray: '3 3' }} />
+              <Scatter data={sample} fill={colors.blue} />
+            </ScatterChart>
+          </Chart>
+        </Card>
+      </div>
+      <div className="grid two">
+        <Card
+          title="Model feature importance"
+          sub="Random forest impurity importance; interpret with correlated energy shares in mind"
+        >
+          {model?.importance.map((x) => (
+            <div className="barrow" key={x.feature}>
+              <label>{x.feature.replace('_pct', '')}</label>
+              <div className="track">
+                <div className="fill" style={{ width: `${x.value * 100}%` }} />
+              </div>
+              <b>{fmt(x.value * 100, 1)}%</b>
+            </div>
+          ))}
+        </Card>
+        <Card title="Regression methodology" sub="Country-year prediction of co2_per_capita_t">
+          <div className="metricline">
+            <span>Algorithm</span>
+            <strong>{model?.algorithm || 'Pending'}</strong>
+          </div>
+          <div className="metricline">
+            <span>Training</span>
+            <strong>{model?.train || 'Pending'}</strong>
+          </div>
+          <div className="metricline">
+            <span>Testing</span>
+            <strong>{model?.test || 'Pending'}</strong>
+          </div>
+          <div className="metricline">
+            <span>Inputs</span>
+            <strong>{model?.features.length || 0} energy shares</strong>
+          </div>
+          <p className="sub">
+            A chronological holdout prevents later years entering training. This is predictive
+            association, not a causal estimate.
+          </p>
+        </Card>
+      </div>
+    </>
+  )
+}
+export function Transition({ data }: { data: Data }) {
+  const years = Array.from(new Set(data.countriesData.map((x) => x.year))).sort()
+  const [year, setYear] = useState(years.at(-1) || 2026)
+  const [region, setRegion] = useState('All regions')
+  const sample = data.countriesData.filter(
+    (x) => x.year === year && (region === 'All regions' || x.region === region),
+  )
+  return (
+    <>
+      <Title
+        title="Global Energy Transition"
+        sub="Explore country pathways across the observed 2000–2026 panel."
+        controls={
+          <Select value={region} onChange={setRegion} options={['All regions', ...data.regions]} />
+        }
+      />
+      <Card
+        title="How do renewable shares relate to CO₂ per capita?"
+        sub="Each point is a country · x: renewable energy share (%) · y: CO₂ per capita (t)"
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 20, margin: '0 4px 20px' }}>
+          <strong style={{ fontSize: 20, color: colors.green }}>{year}</strong>
+          <input
+            className="slider"
+            type="range"
+            min={years[0]}
+            max={years.at(-1)}
+            value={year}
+            onChange={(e) => setYear(Number(e.target.value))}
+          />
+        </div>
+        <Chart tall>
+          <ScatterChart>
+            <CartesianGrid stroke="#edf1f2" />
+            <XAxis
+              type="number"
+              dataKey="renewables_total_pct"
+              name="Renewables"
+              unit="%"
+              tick={{ fontSize: 10 }}
+            />
+            <YAxis
+              type="number"
+              dataKey="co2_per_capita_t"
+              name="CO₂ per capita"
+              unit=" t"
+              tick={{ fontSize: 10 }}
+            />
+            <ZAxis dataKey="population_millions" range={[35, 260]} />
+            <Tooltip
+              cursor={{ strokeDasharray: '3 3' }}
+              content={({ active, payload }) =>
+                active && payload?.length ? (
+                  <div className="tooltip" style={{ padding: 10 }}>
+                    {(payload[0].payload as Row).country}
+                    <br />
+                    Renewables: {fmt((payload[0].payload as Row).renewables_total_pct)}%<br />
+                    CO₂ per capita: {fmt((payload[0].payload as Row).co2_per_capita_t)} t
+                  </div>
+                ) : null
+              }
+            />
+            <Scatter data={sample} fill={colors.green} />
+          </ScatterChart>
+        </Chart>
+        <p className="sub">
+          Bubble area reflects population in the supplied CO₂ dataset. Move the year slider to
+          compare country positions.
+        </p>
+      </Card>
+      <Section
+        title="Observed transition archetypes"
+        detail="Rules use first-to-last-year changes in each country"
+      />
+      <div className="grid three">
+        {['Business-as-Usual', 'Moderate Transition', 'Accelerated Transition'].map((cat) => (
+          <div className="card insight" key={cat}>
+            <strong>{cat}</strong>
+            <div className="evidence">
+              {data.archetypes.filter((x) => x.category === cat).length} countries
+            </div>
+            <p>
+              {cat === 'Accelerated Transition'
+                ? 'Renewables rose at least 15 points and fossil share fell at least 10 points.'
+                : cat === 'Moderate Transition'
+                  ? 'Renewables rose at least 5 points while fossil share declined.'
+                  : 'Countries outside the two observed transition thresholds.'}
+            </p>
+          </div>
+        ))}
+      </div>
+      <Card
+        title="Country transition evidence"
+        sub="Percentage-point change in shares; emissions change in Mt CO₂"
+      >
+        <div className="tablewrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Country</th>
+                <th>Renewables Δ</th>
+                <th>Fossil Δ</th>
+                <th>CO₂ Δ</th>
+                <th>Category</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.archetypes.map((x) => (
+                <tr key={x.country}>
+                  <td>{x.country}</td>
+                  <td>{fmt(x.renewableChange)} pp</td>
+                  <td>{fmt(x.fossilChange)} pp</td>
+                  <td>{fmt(x.emissionsChange)} Mt</td>
+                  <td>
+                    <span className="pill">{x.category}</span>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </>
+  )
+}
+export function Country({ data, initialCountry }: { data: Data; initialCountry?: string }) {
+  const [country, setCountry] = useState(initialCountry || data.countries[0])
+  const rows = data.countriesData
+    .filter((x) => x.country === country)
+    .sort((a, b) => a.year - b.year)
+  const last = rows.at(-1)
+  const arch = data.archetypes.find((x) => x.country === country)
+  return (
+    <>
+      <Title
+        title="Country Explorer"
+        sub="A country-level view of energy mix, emissions and transition progress."
+        controls={<Select value={country} onChange={setCountry} options={data.countries} />}
+      />
+      {last && (
+        <>
+          <div className="grid kpis">
+            <Kpi
+              label="CO₂ emissions"
+              value={fmt(last.co2_emissions_mt) + ' Mt'}
+              detail={String(last.year)}
+            />
+            <Kpi
+              label="CO₂ per capita"
+              value={fmt(last.co2_per_capita_t, 2) + ' t'}
+              detail="Tonnes per person"
+            />
+            <Kpi
+              label="Renewables share"
+              value={fmt(last.renewables_total_pct) + '%'}
+              detail="Latest energy mix"
+            />
+            <Kpi
+              label="Fossil share"
+              value={fmt(last.fossil_total_pct) + '%'}
+              detail="Latest energy mix"
+            />
+          </div>
+          <div className="grid two">
+            <Card title={`${country} energy mix`} sub="Source share (%) from 2000 to latest year">
+              <Chart>
+                <LineChart data={rows}>
+                  <CartesianGrid stroke="#edf1f2" vertical={false} />
+                  <XAxis dataKey="year" tick={{ fontSize: 10 }} />
+                  <YAxis unit="%" tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Legend />
+                  <Line dataKey="coal_pct" name="Coal" stroke={colors.dark} dot={false} />
+                  <Line dataKey="oil_pct" name="Oil" stroke={colors.orange} dot={false} />
+                  <Line dataKey="gas_pct" name="Gas" stroke={colors.blue} dot={false} />
+                  <Line
+                    dataKey="renewables_total_pct"
+                    name="Renewables"
+                    stroke={colors.green}
+                    dot={false}
+                  />
+                </LineChart>
+              </Chart>
+            </Card>
+            <Card title={`${country} CO₂ trajectory`} sub="Observed emissions (Mt CO₂)">
+              <Chart>
+                <AreaChart data={rows}>
+                  <CartesianGrid stroke="#edf1f2" vertical={false} />
+                  <XAxis dataKey="year" tick={{ fontSize: 10 }} />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Area
+                    dataKey="co2_emissions_mt"
+                    name="CO₂ emissions"
+                    stroke={colors.green}
+                    fill="#e0f0e8"
+                  />
+                </AreaChart>
+              </Chart>
+            </Card>
+          </div>
+          <div className="grid two">
+            <Card title="Latest country indicators">
+              <div className="metricline">
+                <span>Region</span>
+                <strong>{last.region}</strong>
+              </div>
+              <div className="metricline">
+                <span>CO₂ intensity</span>
+                <strong>{fmt(last.co2_intensity_kg_per_gdp_usd, 2)} kg / GDP USD</strong>
+              </div>
+              <div className="metricline">
+                <span>Transition category</span>
+                <strong>{arch?.category || 'Unavailable'}</strong>
+              </div>
+              <div className="metricline">
+                <span>Observed range</span>
+                <strong>
+                  {rows[0].year}–{last.year}
+                </strong>
+              </div>
+            </Card>
+            <Card title="2030 country outlook" sub="Scenario outputs">
+              <CountryForecast data={data} country={country} />
+            </Card>
+          </div>
+        </>
+      )}
+    </>
+  )
+}
+export function Quality({ data }: { data: Data }) {
+  return (
+    <>
+      <Title
+        title="Data Quality & Provenance"
+        sub="Five competition datasets; no external observations or pretrained weights."
+      />
+      <Card title="Dataset inventory" sub="Counts and ranges calculated directly from source CSVs">
+        <div className="tablewrap">
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Dataset</th>
+                <th>Rows</th>
+                <th>Columns</th>
+                <th>Missing cells</th>
+                <th>Range</th>
+                <th>Countries</th>
+                <th>Markets</th>
+                <th>Regions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.quality.map((x) => (
+                <tr key={x.name}>
+                  <td>{x.name}</td>
+                  <td>{x.rows.toLocaleString()}</td>
+                  <td>{x.columns}</td>
+                  <td>{x.missing.toLocaleString()}</td>
+                  <td>
+                    {x.start} – {x.end}
+                  </td>
+                  <td>{x.countries ?? '—'}</td>
+                  <td>{x.markets ?? '—'}</td>
+                  <td>{x.regions ?? '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+      <div style={{ height: 16 }} />
+      <Card
+        title="Global temperature anomaly and atmospheric CO₂"
+        sub="Monthly climate context from temperature_anomaly_monthly.csv"
+      >
+        <Chart>
+          <LineChart data={data.temperature}>
+            <CartesianGrid stroke="#edf1f2" vertical={false} />
+            <XAxis dataKey="year_month" minTickGap={65} tick={{ fontSize: 10 }} />
+            <YAxis yAxisId="a" unit="°C" tick={{ fontSize: 10 }} />
+            <YAxis yAxisId="b" orientation="right" unit="ppm" tick={{ fontSize: 10 }} />
+            <Tooltip />
+            <Legend />
+            <Line
+              yAxisId="a"
+              dataKey="temp_anomaly_c"
+              name="Temperature anomaly °C"
+              stroke={colors.orange}
+              dot={false}
+            />
+            <Line yAxisId="b" dataKey="co2_ppm" name="CO₂ ppm" stroke={colors.blue} dot={false} />
+          </LineChart>
+        </Chart>
+      </Card>
+    </>
+  )
+}
+export function Product() {
+  return (
+    <>
+      <Title
+        title="From Climate Data to Decision Intelligence"
+        sub="One intelligence layer connecting carbon markets, climate events, emissions and energy transitions."
+      />
+      <div className="grid two">
+        <Card
+          title="The decision problem"
+          sub="A fragmented evidence base creates slow, inconsistent climate decisions"
+        >
+          <p>
+            ESG analysts need comparable emissions evidence. Carbon-market participants need price
+            and event context. Energy companies need transition signals. Policy teams need
+            transparent scenario assumptions.
+          </p>
+        </Card>
+        <Card title="Value proposition" sub="Traceable analytics for decisions">
+          <p>
+            Monsoon Mandate connects the five supplied datasets in one workflow: observe market and
+            climate signals, evaluate predictive models, compare country transitions, and review
+            documented 2030 pathways.
+          </p>
+        </Card>
+      </div>
+      <Section title="Product modules" />
+      <div className="grid three">
+        {[
+          ['Carbon Market Forecasting', 'Daily market context and evaluated price outlooks'],
+          [
+            'Event Shock Intelligence',
+            'Dated climate and policy events with measured predictive value',
+          ],
+          ['CO₂ Driver Analytics', 'Energy mix variables linked to per-capita emissions'],
+          ['Transition Monitoring', 'Country movement across fossil and renewable shares'],
+          ['2030 Scenario Modelling', 'Transparent assumptions and comparable trajectories'],
+        ].map(([a, b]) => (
+          <Card key={a} title={a}>
+            <p className="sub">{b}</p>
+          </Card>
+        ))}
+      </div>
+      <Section title="Customers & commercial model" />
+      <div className="grid two">
+        <Card title="Target customers">
+          <p>
+            Primary: energy, environment and finance ministries, and disaster agencies. Secondary:
+            ESG and sustainability teams. South Asia first: Bangladesh, India and Pakistan are
+            present in the supplied dataset.
+          </p>
+        </Card>
+        <Card title="Potential monetization">
+          <p>Government license + SaaS subscriptions + API access</p>
+          <p className="sub">
+            Commercial options are conceptual; no revenue projections are claimed.
+          </p>
+        </Card>
+      </div>
+      <Section title="Solution architecture" />
+      <Card
+        title="From source data to decisions"
+        sub="Analysis and model training happen outside the dashboard"
+      >
+        <div className="architecture">
+          {[
+            'Provided CSVs',
+            'Cleaning & validation',
+            'Feature engineering',
+            'Predictive & scenario models',
+            'Validated JSON outputs',
+            'Dashboard data layer',
+            'Decision makers',
+          ].map((x, i) => (
+            <span key={x}>
+              {x}
+              {i < 6 && <em> →</em>}
+            </span>
+          ))}
+        </div>
+        <p className="sub">
+          Modules: carbon forecasting · CO₂ regression · event experiment · transition analysis ·
+          2030 scenarios.
+        </p>
+      </Card>
+    </>
+  )
+}
+export function EventResults({
+  data,
+  market,
+  setMarket,
+}: {
+  data: Data
+  market: string
+  setMarket: (x: string) => void
+}) {
+  const result = (data as any).eventExperiment
+  const [kind, setKind] = useState('All')
+  const events = data.events.filter(
+    (e) =>
+      kind === 'All' ||
+      (kind === 'Policy' && e.is_policy) ||
+      (kind === 'Extreme Weather' && e.is_extreme_weather) ||
+      (kind === 'Disaster' && e.is_disaster),
+  )
+  return (
+    <>
+      <Title
+        title="Do Climate Events Move Carbon Markets?"
+        sub="A measured event-feature experiment and a dated event ledger."
+        controls={<Select value={market} onChange={setMarket} options={data.markets} />}
+      />
+      <div className="grid kpis">
+        <Kpi
+          label="EU ETS baseline RMSE"
+          value={fmt(result.baseline.rmse, 3)}
+          detail="Price-history features"
+        />
+        <Kpi
+          label="Event-aware RMSE"
+          value={fmt(result.eventAware.rmse, 3)}
+          detail="Same split plus event counts"
+        />
+        <Kpi
+          label="RMSE improvement"
+          value={fmt(result.improvementPct, 2) + '%'}
+          detail="Negative means event features worsened RMSE"
+        />
+        <Kpi
+          label="Event-aware MAPE"
+          value={fmt(result.eventAware.mape, 2) + '%'}
+          detail="Held-out test period"
+        />
+      </div>
+      <div className="note">
+        For EU ETS, event counts did not improve RMSE in this experiment (
+        {fmt(result.improvementPct, 2)}%). This result supports caution before treating recorded
+        climate events as a trading signal.
+      </div>
+      <div className="grid two">
+        <Card
+          title="Baseline vs event-aware predictive error"
+          sub="EU ETS · lower RMSE is better · same chronological holdout"
+        >
+          <Chart short>
+            <BarChart
+              data={[
+                { model: 'Baseline', rmse: result.baseline.rmse },
+                { model: 'Event-aware', rmse: result.eventAware.rmse },
+              ]}
+              layout="vertical"
+            >
+              <CartesianGrid stroke="#edf1f2" horizontal={false} />
+              <XAxis type="number" domain={[0, 'auto']} tick={{ fontSize: 10 }} />
+              <YAxis type="category" dataKey="model" width={90} tick={{ fontSize: 10 }} />
+              <Tooltip />
+              <Bar dataKey="rmse" name="RMSE" fill={colors.green} />
+            </BarChart>
+          </Chart>
+        </Card>
+        <Card title="Experiment design" sub="Cross-dataset feature engineering">
+          <div className="metricline">
+            <span>Market</span>
+            <strong>EU ETS</strong>
+          </div>
+          <div className="metricline">
+            <span>Training</span>
+            <strong>{result.train}</strong>
+          </div>
+          <div className="metricline">
+            <span>Testing</span>
+            <strong>{result.test}</strong>
+          </div>
+          <p className="sub">{result.scope}</p>
+          <p className="sub">
+            Features: {result.features.join(', ')}. Model: random forest autoregression.
+          </p>
+        </Card>
+      </div>
+      <Card
+        title={`${market.replaceAll('_', ' ')} prices with event context`}
+        sub="Prices are market-specific; the event ledger below includes all supplied regions"
+      >
+        <EventPriceChart market={market} data={data} />
+        <div className="tabs">
+          {['All', 'Policy', 'Extreme Weather', 'Disaster'].map((x) => (
+            <button key={x} className={kind === x ? 'active' : ''} onClick={() => setKind(x)}>
+              {x}
+            </button>
+          ))}
+        </div>
+        <div className="tablewrap" style={{ maxHeight: 340, overflow: 'auto' }}>
+          <table className="table">
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Region</th>
+                <th>Type</th>
+                <th>Severity</th>
+                <th>Policy</th>
+                <th>Weather</th>
+                <th>Disaster</th>
+                <th>Event</th>
+              </tr>
+            </thead>
+            <tbody>
+              {events.map((e, i) => (
+                <tr key={i}>
+                  <td>{e.date}</td>
+                  <td>{e.region}</td>
+                  <td>{e.event_type}</td>
+                  <td>{e.severity_score}</td>
+                  <td>{e.is_policy ? 'Yes' : 'No'}</td>
+                  <td>{e.is_extreme_weather ? 'Yes' : 'No'}</td>
+                  <td>{e.is_disaster ? 'Yes' : 'No'}</td>
+                  <td>{e.description}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+    </>
+  )
+}
+function ScenarioResults({ data }: { data: Data }) {
+  const [country, setCountry] = useState(data.countries[0])
+  const [selected, setSelected] = useState('Business-as-Usual')
+  const scenarios = (data as any).scenarios[country]
+  const history = data.countriesData
+    .filter((x) => x.country === country)
+    .sort((a, b) => a.year - b.year)
+  const names = ['Business-as-Usual', 'Moderate Transition', 'Accelerated Transition']
+  const last = history.at(-1)
+  const end = scenarios[selected].forecast.at(-1).co2_emissions_mt
+  const bau = scenarios['Business-as-Usual'].forecast.at(-1).co2_emissions_mt
+  const combined = history
+    .map((x) => ({ year: x.year, observed: x.co2_emissions_mt }))
+    .concat(
+      Array.from({ length: 5 }, (_, i) => {
+        const year = 2026 + i
+        const row: any = { year }
+        for (const name of names) row[name] = scenarios[name].forecast[i].co2_emissions_mt
+        return row
+      }),
+    )
+  return (
+    <>
+      <Title
+        title="2030 Scenario Lab"
+        sub="Empirical analogue pathways derived from observed country transitions."
+        controls={
+          <>
+            <Select value={country} onChange={setCountry} options={data.countries} />
+            <Select value={selected} onChange={setSelected} options={names} />
+          </>
+        }
+      />
+      <div className="grid kpis">
+        <Kpi
+          label="2026 observed emissions"
+          value={fmt(last?.co2_emissions_mt) + ' Mt'}
+          detail={country}
+        />
+        <Kpi label="2030 projected emissions" value={fmt(end) + ' Mt'} detail={selected} />
+        <Kpi
+          label="Change vs 2026"
+          value={fmt((end / (last?.co2_emissions_mt || 1) - 1) * 100, 1) + '%'}
+          detail="Selected pathway"
+        />
+        <Kpi
+          label="Difference vs BAU"
+          value={fmt(end - bau) + ' Mt'}
+          detail="Negative = lower than BAU"
+        />
+      </div>
+      <Card
+        title={`${country} — observed emissions and 2030 pathways`}
+        sub="Solid green: observed 2000–2026 · other lines: scenario projections 2026–2030"
+      >
+        <Chart tall>
+          <LineChart data={combined}>
+            <CartesianGrid stroke="#edf1f2" vertical={false} />
+            <XAxis dataKey="year" tick={{ fontSize: 10 }} />
+            <YAxis tick={{ fontSize: 10 }} width={55} unit=" Mt" />
+            <Tooltip formatter={(v: any) => fmt(Number(v)) + ' Mt'} />
+            <Legend />
+            <ReferenceLine
+              x={2026}
+              stroke="#81969d"
+              strokeDasharray="4 4"
+              label={{ value: 'Projection begins', fontSize: 10, position: 'top' }}
+            />
+            <Line
+              dataKey="observed"
+              name="Observed data"
+              stroke={colors.green}
+              strokeWidth={2.5}
+              dot={false}
+            />
+            <Line
+              dataKey="Business-as-Usual"
+              name="BAU scenario"
+              stroke={colors.dark}
+              strokeDasharray="5 3"
+              dot={false}
+            />
+            <Line
+              dataKey="Moderate Transition"
+              name="Moderate scenario"
+              stroke={colors.blue}
+              strokeDasharray="5 3"
+              dot={false}
+            />
+            <Line
+              dataKey="Accelerated Transition"
+              name="Accelerated scenario"
+              stroke={colors.orange}
+              strokeDasharray="5 3"
+              dot={false}
+            />
+          </LineChart>
+        </Chart>
+      </Card>
+      <Section
+        title="Model assumptions"
+        detail="Annual rates derived from 2016–2026 observations"
+      />
+      <div className="grid three">
+        {names.map((name) => {
+          const a = scenarios[name].assumptions
+          return (
+            <Card
+              key={name}
+              title={name}
+              sub={name === selected ? 'Selected pathway' : 'Alternative pathway'}
+            >
+              <div className="metricline">
+                <span>Renewable share</span>
+                <strong>{fmt(a.renewablePpPerYear, 3)} pp / year</strong>
+              </div>
+              <div className="metricline">
+                <span>Fossil share</span>
+                <strong>{fmt(a.fossilPpPerYear, 3)} pp / year</strong>
+              </div>
+              <div className="metricline">
+                <span>Emissions</span>
+                <strong>{fmt(a.emissionsGrowthPct, 3)}% / year</strong>
+              </div>
+              <div className="metricline">
+                <span>2030 emissions</span>
+                <strong>{fmt(scenarios[name].forecast.at(-1).co2_emissions_mt)} Mt</strong>
+              </div>
+            </Card>
+          )
+        })}
+      </div>
+      <div className="note">
+        {(data as any).scenarioMethod} These are scenario analogues, not causal policy impact
+        estimates.
+      </div>
+    </>
+  )
+}
+function CountryForecast({ data, country }: { data: Data; country: string }) {
+  const s = (data as any).scenarios[country]
+  const rows = Array.from({ length: 5 }, (_, i) => ({
+    year: 2026 + i,
+    bau: s['Business-as-Usual'].forecast[i].co2_emissions_mt,
+    moderate: s['Moderate Transition'].forecast[i].co2_emissions_mt,
+    accelerated: s['Accelerated Transition'].forecast[i].co2_emissions_mt,
+  }))
+  return (
+    <Chart short>
+      <LineChart data={rows}>
+        <CartesianGrid stroke="#edf1f2" vertical={false} />
+        <XAxis dataKey="year" tick={{ fontSize: 10 }} />
+        <YAxis tick={{ fontSize: 10 }} />
+        <Tooltip formatter={(v: any) => fmt(Number(v)) + ' Mt'} />
+        <Legend />
+        <Line dataKey="bau" name="BAU" stroke={colors.dark} dot={false} />
+        <Line dataKey="moderate" name="Moderate" stroke={colors.blue} dot={false} />
+        <Line dataKey="accelerated" name="Accelerated" stroke={colors.orange} dot={false} />
+      </LineChart>
+    </Chart>
+  )
+}
+export function PerformanceResults({ data }: { data: Data }) {
+  const m = data.co2Model
+  const e = (data as any).eventExperiment
+  const markets = Object.entries(data.carbon)
+  return (
+    <>
+      <Title
+        title="Model Performance"
+        sub="Held-out scores, model scope and scenario methodology in one evidence ledger."
+      />
+      <div className="grid two">
+        <Card
+          title="01 / Carbon price forecasting"
+          sub="Random forest autoregression · chronological 80/20 holdout"
+        >
+          <div className="tablewrap">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Market</th>
+                  <th>RMSE</th>
+                  <th>MAPE</th>
+                  <th>Test period</th>
+                </tr>
+              </thead>
+              <tbody>
+                {markets.map(([name, value]) => (
+                  <tr key={name}>
+                    <td>{name}</td>
+                    <td>
+                      {fmt((value as any).model.rmse, 3)} {value.currency}
+                    </td>
+                    <td>{fmt((value as any).model.mape, 2)}%</td>
+                    <td>{(value as any).model.test}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <p className="sub">
+            Inputs: lagged prices at 1, 2, 5 and 10 days, plus 5- and 20-day averages. Horizon: 30
+            trading days, recursively predicted.
+          </p>
+        </Card>
+        <Card
+          title="02 / CO₂ per capita regression"
+          sub="Random forest · 2000–2020 train / 2021–2026 test"
+        >
+          <div className="metricline">
+            <span>R²</span>
+            <strong>{fmt(m?.r2, 3)}</strong>
+          </div>
+          <div className="metricline">
+            <span>RMSE</span>
+            <strong>{fmt(m?.rmse, 3)} t/person</strong>
+          </div>
+          <p className="sub">
+            Inputs: {m?.features.join(', ')}. The modest R² is reported without adjustment.
+          </p>
+        </Card>
+      </div>
+    </>
+  )
+}
+export default function Dashboard() {
+  const [data, setData] = useState<Data | null>(null)
+  const [error, setError] = useState('')
+  const [page, setPage] = useState('Overview')
+  const [market, setMarket] = useState('')
+  const [assistantOpen, setAssistantOpen] = useState(false)
+  useEffect(() => {
+    fetch('/data/dashboard.json')
+      .then((r) => {
+        if (!r.ok) throw new Error('Dataset export is missing')
+        return r.json()
+      })
+      .then((d: Data) => {
+        setData(d)
+        setMarket(d.markets[0] || '')
+      })
+      .catch((e) => setError(String(e)))
+  }, [])
+  return (
+    <div className="shell">
+      <aside className="sidebar">
+        <div className="brand">
+          ◈ Monsoon Mandate<small>Intelligence platform</small>
+        </div>
+        <nav className="nav">
+          {nav.map(([label, Icon]) => (
+            <button
+              key={label}
+              className={page === label ? 'active' : ''}
+              onClick={() => setPage(label)}
+            >
+              <Icon size={16} />
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div className="sidefoot">
+          <span className="dot" />
+          Competition dataset loaded
+          <br />
+          CodeFest Datathon 2026
+        </div>
+      </aside>
+      <div className="main">
+        <header className="topbar">
+          <strong>{page}</strong>
+          <div className="topright">
+            <button
+              type="button"
+              className="assistant-launch"
+              onClick={() => setAssistantOpen(true)}
+            >
+              <MessageCircle size={15} />
+              <span>Briefwright</span>
+            </button>
+            <span>Last data year: {data?.summary.latestYear || '—'}</span>
+            <span className="status">
+              <span className="dot" />
+              {error ? 'Data error' : data ? 'Data ready' : 'Loading'}
+            </span>
+          </div>
+        </header>
+        <main className="content">
+          {error ? (
+            <Empty>{error}. Run build_data.py from the repository root.</Empty>
+          ) : !data || !market ? (
+            <Empty>Loading validated dataset export…</Empty>
+          ) : page === 'Overview' ? (
+            <Overview data={data} market={market} setMarket={setMarket} />
+          ) : page === 'Carbon Markets' ? (
+            <CarbonMarkets data={data} market={market} setMarket={setMarket} />
+          ) : page === 'Climate Event Impact' ? (
+            <EventResults data={data} market={market} setMarket={setMarket} />
+          ) : page === 'CO₂ Intelligence' ? (
+            <Co2 data={data} />
+          ) : page === 'Energy Transition' ? (
+            <Transition data={data} />
+          ) : page === '2030 Scenario Lab' ? (
+            <ScenarioResults data={data} />
+          ) : page === 'Country Explorer' ? (
+            <Country data={data} />
+          ) : page === 'Model Performance' ? (
+            <PerformanceResults data={data} />
+          ) : page === 'Data Quality' ? (
+            <Quality data={data} />
+          ) : (
+            <Product />
+          )}
+          <div className="footer">
+            Monsoon Mandate Intelligence · CodeFest Datathon 2026 · Source: supplied competition CSV
+            datasets
+          </div>
+        </main>
+      </div>
+      {data && (
+        <AssistantPanel
+          data={data as unknown as DashboardData}
+          open={assistantOpen}
+          onClose={() => setAssistantOpen(false)}
+        />
+      )}
+    </div>
+  )
+}

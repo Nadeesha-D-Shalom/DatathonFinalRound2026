@@ -1,42 +1,951 @@
 'use client'
-import {useEffect,useMemo,useState} from 'react'
-import {Area,AreaChart,Bar,BarChart,CartesianGrid,Legend,Line,LineChart,ReferenceLine,ResponsiveContainer,Tooltip,XAxis,YAxis} from 'recharts'
-import {Activity,BarChart3,BookOpen,BriefcaseBusiness,ChevronDown,CloudSun,Database,Globe2,HelpCircle,LayoutDashboard,Leaf,MessageCircle,Target,TrendingDown,TrendingUp,X} from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  Line,
+  LineChart,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import {
+  Activity,
+  BarChart3,
+  BookOpen,
+  BriefcaseBusiness,
+  FileText,
+  ChevronDown,
+  CloudSun,
+  Database,
+  Globe2,
+  HelpCircle,
+  LayoutDashboard,
+  Leaf,
+  MessageCircle,
+  Target,
+  TrendingDown,
+  TrendingUp,
+  X,
+} from 'lucide-react'
 import AssistantPanel from '@/components/assistant/AssistantPanel'
 import ScenarioSimulator from '@/components/scenario/ScenarioSimulator'
+import SovereignBrief from '@/components/brief/SovereignBrief'
 import CO2EnergyPage from '@/components/co2/CO2EnergyPage'
 import ConnectedCarbonPage from '@/components/carbon/ConnectedCarbonPage'
 import Q2EventsPage from '@/components/q2/Q2EventsPage'
 import Q2ResultsCard from '@/components/q2/Q2ResultsCard'
-import {Overview,CarbonMarkets,Co2,Country,EventResults,PerformanceResults,Product,Quality,Transition} from '@/components/dashboard'
-import type {CountryYear,DashboardData,ScenarioName} from '@/lib/assistant/types'
+import Q3CountryStatus from '@/components/q3/Q3CountryStatus'
+import Q3ResultsCard from '@/components/q3/Q3ResultsCard'
+import { getQ2Summary, type Q2Summary } from '@/lib/api/q2'
+import {
+  Overview,
+  CarbonMarkets,
+  Co2,
+  Country,
+  PerformanceResults,
+  Product,
+  Quality,
+  Transition,
+} from '@/components/dashboard'
+import type { CountryYear, DashboardData, ScenarioName } from '@/lib/assistant/types'
 
-type Page='Overview'|'Carbon Price Forecast'|'CO₂ & Energy'|'Climate Events'|'2030 Simulator'|'Country Explorer'|'Model Results'|'Business Case'|'Data Quality'
-const navigation:[Page,typeof LayoutDashboard][]=[['Overview',LayoutDashboard],['Carbon Price Forecast',TrendingUp],['CO₂ & Energy',Leaf],['Climate Events',CloudSun],['2030 Simulator',Target],['Country Explorer',Globe2],['Model Results',BarChart3],['Business Case',BriefcaseBusiness]]
-const scenarioNames:ScenarioName[]=['Business-as-Usual','Moderate Transition','Accelerated Transition']
-const scenarioLabels:Record<ScenarioName,string>={'Business-as-Usual':'Current Trend','Moderate Transition':'Moderate Renewable Growth','Accelerated Transition':'Fast Renewable Growth'}
-const chartColors={history:'#287d62',current:'#546877',moderate:'#2a8ba3',fast:'#cf8a3d'}
-const num=(value:number|undefined,d=1)=>value===undefined||!Number.isFinite(value)?'Unavailable':value.toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d})
-const signed=(value:number,d=1)=>`${value>0?'+':''}${num(value,d)}`
-const mt=(value:number|undefined,d=1)=>`${num(value,d)} Mt CO₂`
-const latest=(data:DashboardData,country:string)=>data.countriesData.filter(x=>x.country===country).sort((a,b)=>b.year-a.year)[0]
-const yearRows=(data:DashboardData,country:string)=>data.countriesData.filter(x=>x.country===country).sort((a,b)=>a.year-b.year)
-function Term({label,meaning}:{label:string;meaning:string}){return <abbr className="v2-term" title={meaning}>{label}<HelpCircle size={12}/></abbr>}
-function PageHead({eyebrow,title,description,controls}:{eyebrow:string;title:string;description:string;controls?:React.ReactNode}){return <div className="v2-page-head"><div><span className="v2-eyebrow">{eyebrow}</span><h1>{title}</h1><p>{description}</p></div>{controls&&<div className="v2-controls">{controls}</div>}</div>}
-function LabeledSelect({label,value,onChange,options}:{label:string;value:string;onChange:(x:string)=>void;options:{value:string;label:string}[]}){return <label className="v2-select"><span>{label}</span><select value={value} onChange={e=>onChange(e.target.value)}>{options.map(x=><option value={x.value} key={x.value}>{x.label}</option>)}</select></label>}
-function Kpi({label,value,detail,tone}:{label:string;value:string;detail:string;tone?:'up'|'down'|'neutral'}){const unitHelp=value.includes('Mt CO₂')?'Mt means million tonnes of carbon dioxide':undefined;return <div className="v2-kpi"><div className="v2-kpi-label">{label}</div><div className={'v2-kpi-value '+(tone==='up'?'v2-positive':tone==='down'?'v2-negative':'')} title={unitHelp}>{value}{unitHelp&&<HelpCircle className="v2-value-help" size={13}/>}</div><p>{detail}</p></div>}
-function Explain({title='What does this mean?',children,tone='neutral'}:{title?:string;children:React.ReactNode;tone?:'positive'|'negative'|'neutral'}){return <div className={'v2-explain v2-'+tone}><strong>{title}</strong><p>{children}</p></div>}
-function Detail({title,children}:{title:string;children:React.ReactNode}){return <details className="v2-details"><summary>{title}<ChevronDown size={15}/></summary><div className="v2-detail-body">{children}</div></details>}
-function ChartCard({title,subtitle,children}:{title:string;subtitle:string;children:React.ReactNode}){return <section className="v2-card v2-chart-card"><h2>{title}</h2><p className="v2-subtitle">{subtitle}</p>{children}</section>}
+type Page =
+  | 'Overview'
+  | 'Carbon Price Forecast'
+  | 'CO₂ & Energy'
+  | 'Climate Events'
+  | '2030 Simulator'
+  | 'Country Explorer'
+  | 'Model Results'
+  | 'Business Case'
+  | 'Sovereign Brief'
+  | 'Data Quality'
+const navigation: [Page, typeof LayoutDashboard][] = [
+  ['Overview', LayoutDashboard],
+  ['Carbon Price Forecast', TrendingUp],
+  ['CO₂ & Energy', Leaf],
+  ['Climate Events', CloudSun],
+  ['2030 Simulator', Target],
+  ['Country Explorer', Globe2],
+  ['Model Results', BarChart3],
+  ['Sovereign Brief', FileText],
+  ['Business Case', BriefcaseBusiness],
+]
+const scenarioNames: ScenarioName[] = [
+  'Business-as-Usual',
+  'Moderate Transition',
+  'Accelerated Transition',
+]
+const scenarioLabels: Record<ScenarioName, string> = {
+  'Business-as-Usual': 'Current Trend',
+  'Moderate Transition': 'Moderate Renewable Growth',
+  'Accelerated Transition': 'Fast Renewable Growth',
+}
+const chartColors = { history: '#287d62', current: '#546877', moderate: '#2a8ba3', fast: '#cf8a3d' }
+const num = (value: number | undefined, d = 1) =>
+  value === undefined || !Number.isFinite(value)
+    ? 'Unavailable'
+    : value.toLocaleString(undefined, { minimumFractionDigits: d, maximumFractionDigits: d })
+const signed = (value: number, d = 1) => `${value > 0 ? '+' : ''}${num(value, d)}`
+const mt = (value: number | undefined, d = 1) => `${num(value, d)} Mt CO₂`
+const latest = (data: DashboardData, country: string) =>
+  data.countriesData.filter((x) => x.country === country).sort((a, b) => b.year - a.year)[0]
+const yearRows = (data: DashboardData, country: string) =>
+  data.countriesData.filter((x) => x.country === country).sort((a, b) => a.year - b.year)
+function Term({ label, meaning }: { label: string; meaning: string }) {
+  return (
+    <abbr className="v2-term" title={meaning}>
+      {label}
+      <HelpCircle size={12} />
+    </abbr>
+  )
+}
+function PageHead({
+  eyebrow,
+  title,
+  description,
+  controls,
+}: {
+  eyebrow: string
+  title: string
+  description: string
+  controls?: React.ReactNode
+}) {
+  return (
+    <div className="v2-page-head">
+      <div>
+        <span className="v2-eyebrow">{eyebrow}</span>
+        <h1>{title}</h1>
+        <p>{description}</p>
+      </div>
+      {controls && <div className="v2-controls">{controls}</div>}
+    </div>
+  )
+}
+function LabeledSelect({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string
+  value: string
+  onChange: (x: string) => void
+  options: { value: string; label: string }[]
+}) {
+  return (
+    <label className="v2-select">
+      <span>{label}</span>
+      <select value={value} onChange={(e) => onChange(e.target.value)}>
+        {options.map((x) => (
+          <option value={x.value} key={x.value}>
+            {x.label}
+          </option>
+        ))}
+      </select>
+    </label>
+  )
+}
+function Kpi({
+  label,
+  value,
+  detail,
+  tone,
+}: {
+  label: string
+  value: string
+  detail: string
+  tone?: 'up' | 'down' | 'neutral'
+}) {
+  const unitHelp = value.includes('Mt CO₂')
+    ? 'Mt means million tonnes of carbon dioxide'
+    : undefined
+  return (
+    <div className="v2-kpi">
+      <div className="v2-kpi-label">{label}</div>
+      <div
+        className={
+          'v2-kpi-value ' + (tone === 'up' ? 'v2-positive' : tone === 'down' ? 'v2-negative' : '')
+        }
+        title={unitHelp}
+      >
+        {value}
+        {unitHelp && <HelpCircle className="v2-value-help" size={13} />}
+      </div>
+      <p>{detail}</p>
+    </div>
+  )
+}
+function Explain({
+  title = 'What does this mean?',
+  children,
+  tone = 'neutral',
+}: {
+  title?: string
+  children: React.ReactNode
+  tone?: 'positive' | 'negative' | 'neutral'
+}) {
+  return (
+    <div className={'v2-explain v2-' + tone}>
+      <strong>{title}</strong>
+      <p>{children}</p>
+    </div>
+  )
+}
+function Detail({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <details className="v2-details">
+      <summary>
+        {title}
+        <ChevronDown size={15} />
+      </summary>
+      <div className="v2-detail-body">{children}</div>
+    </details>
+  )
+}
+function ChartCard({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string
+  subtitle: string
+  children: React.ReactNode
+}) {
+  return (
+    <section className="v2-card v2-chart-card">
+      <h2>{title}</h2>
+      <p className="v2-subtitle">{subtitle}</p>
+      {children}
+    </section>
+  )
+}
 
-function CarbonLine({data,market,compact=false}:{data:DashboardData;market:string;compact?:boolean}){const item=data.carbon[market];const history=item.history.slice(compact?-80:-160).map(x=>({date:x.date,historical:x.price}));const anchor=history.at(-1);const points=[...history,...(anchor?[{date:anchor.date,predicted:anchor.historical}]:[]),...item.forecast.map(x=>({date:x.date,predicted:x.price,lower:x.lower,upper:x.upper}))];return <div className={'v2-chart '+(compact?'v2-chart-compact':'')}><ResponsiveContainer width="100%" height="100%"><LineChart data={points} margin={{top:15,right:14,bottom:4,left:4}}><CartesianGrid vertical={false} stroke="#e7edef"/><XAxis dataKey="date" tick={{fontSize:10}} minTickGap={48}/><YAxis width={50} tick={{fontSize:10}} domain={['auto','auto']}/><Tooltip formatter={(value:any,name:any)=>[`${num(Number(value),2)} ${item.currency}`,name]}/><Legend verticalAlign="bottom" height={32}/><ReferenceLine x={item.latestDate} stroke="#8ba0a6" strokeDasharray="5 4" label={{value:'Forecast starts',fontSize:10,position:'insideTopRight'}}/><Line dataKey="historical" name="Historical price" stroke={chartColors.history} strokeWidth={2.5} dot={false} isAnimationActive={false}/><Line dataKey="predicted" name="30-day forecast" stroke={chartColors.moderate} strokeWidth={2.6} strokeDasharray="5 2" dot={false} isAnimationActive={false}/>{!compact&&<Line dataKey="lower" name="Approx. lower range" stroke="#a5c8d2" strokeDasharray="2 3" dot={false} isAnimationActive={false}/>}{!compact&&<Line dataKey="upper" name="Approx. upper range" stroke="#a5c8d2" strokeDasharray="2 3" dot={false} isAnimationActive={false}/>}</LineChart></ResponsiveContainer></div>}
-function OverviewPage({data,market,setMarket,setPage}:{data:DashboardData;market:string;setMarket:(x:string)=>void;setPage:(x:Page)=>void}){const item=data.carbon[market],final=item.forecast.at(-1)!,move=(final.price-item.latest)/item.latest*100;const year=data.summary.latestYear,latestRows=data.countriesData.filter(x=>x.year===year),renew=latestRows.reduce((sum,row)=>sum+row.renewables_total_pct,0)/latestRows.length;return <><PageHead eyebrow="Your starting point" title="Climate & Energy Overview" description="A quick view of carbon prices, emissions and the shift to cleaner energy." controls={<LabeledSelect label="Carbon market" value={market} onChange={setMarket} options={data.markets.map(x=>({value:x,label:x.replaceAll('_',' ')}))}/>}/><div className="v2-intro"><strong>At a glance</strong><span>{market.replaceAll('_',' ')} is forecast to {move>=0?'rise':'fall'} {num(Math.abs(move))}% over the next 30 trading days. Across the {latestRows.length} countries in the dataset, the average renewable share is {num(renew)}% in {year}.</span></div><div className="v2-kpi-grid"><Kpi label="Latest Carbon Price" value={`${num(item.latest,2)} ${item.currency}`} detail={`Observed on ${item.latestDate}.`}/><Kpi label="Expected Price Change" value={`${signed(move)}%`} detail="Model estimate over 30 trading days." tone={move>=0?'up':'down'}/><Kpi label="Renewable Energy Share" value={`${num(renew)}%`} detail={`Unweighted country average in ${year}.`}/><Kpi label="Countries Covered" value={String(data.summary.countryCount)} detail="Countries with emissions and energy records."/></div><ChartCard title={`Where could ${market.replaceAll('_',' ')} prices go next?`} subtitle="Solid line: observed prices. Dashed line: the 30-trading-day model forecast."><CarbonLine data={data} market={market} compact/></ChartCard><Explain>{move>=0?`The model estimates a higher ${market.replaceAll('_',' ')} price after 30 trading days; the projected change is ${signed(move)}%.`:`The model estimates a lower ${market.replaceAll('_',' ')} price after 30 trading days; the projected change is ${signed(move)}%.`} Forecasts are estimates, while the latest price is observed data.</Explain><div className="v2-next-grid"><button onClick={()=>setPage('Carbon Price Forecast')}><TrendingUp size={18}/><strong>Explore the price forecast</strong><span>See the predicted price and model accuracy.</span></button><button onClick={()=>setPage('CO₂ & Energy')}><Leaf size={18}/><strong>Explore CO₂ & energy</strong><span>See how energy choices relate to emissions.</span></button><button onClick={()=>setPage('2030 Simulator')}><Target size={18}/><strong>Explore 2030 paths</strong><span>Compare future emissions for a country.</span></button></div><Detail title="See more charts and data context"><Overview data={data} market={market} setMarket={setMarket}/></Detail></>}
-function CarbonPage({data,market,setMarket}:{data:DashboardData;market:string;setMarket:(x:string)=>void}){const item=data.carbon[market],final=item.forecast.at(-1)!,delta=final.price-item.latest,move=delta/item.latest*100;return <><PageHead eyebrow="Carbon markets" title="Carbon Price Forecast" description="See recent carbon prices and the model's prediction for the next 30 trading days." controls={<LabeledSelect label="Carbon market" value={market} onChange={setMarket} options={data.markets.map(x=>({value:x,label:x.replaceAll('_',' ')}))}/>}/><div className="v2-intro"><strong>What are we looking at?</strong><span>Carbon markets set prices for emissions allowances. This page shows the selected market's recent price and a model estimate for 30 trading days ahead.</span></div><div className="v2-kpi-grid"><Kpi label="Current Price" value={`${num(item.latest,2)} ${item.currency}`} detail={`Latest observed price, ${item.latestDate}.`}/><Kpi label="Predicted Price" value={`${num(final.price,2)} ${item.currency}`} detail={`Estimate for ${final.date}.`}/><Kpi label="Expected Change" value={`${signed(move)}%`} detail={`${num(Math.abs(delta),2)} ${item.currency} ${delta>=0?'higher':'lower'} than today.`} tone={delta>=0?'up':'down'}/><Kpi label="Prediction Accuracy" value={`${num(item.model.mape,2)}%`} detail="Average percentage error on held-out data. Lower is better."/></div><Explain>{`${market.replaceAll('_',' ')} is projected to ${delta>=0?'rise':'fall'} from ${num(item.latest,2)} to ${num(final.price,2)} ${item.currency} over 30 trading days.`} This is a model estimate, not a guaranteed future price.</Explain><ChartCard title={`${market.replaceAll('_',' ')}: recent prices and 30-day forecast`} subtitle="Historical prices end at the vertical boundary; the dashed line shows predicted prices."><div className="v2-periods"><span><b>OBSERVED</b> through {item.latestDate}</span><span><b>FORECAST</b> next 30 trading days</span><Term label={item.currency} meaning={`The market's quoted currency is ${item.currency}.`}/></div><CarbonLine data={data} market={market}/></ChartCard><Detail title="Model details, uncertainty and market patterns"><div className="v2-technical-kpis"><div><Term label="RMSE" meaning="Root mean squared error: typical prediction error, expressed in the market currency."/><strong>{num(item.model.rmse,3)} {item.currency}</strong></div><div><Term label="MAPE" meaning="Mean absolute percentage error: average size of prediction errors as a percentage."/><strong>{num(item.model.mape,2)}%</strong></div><div><span>Test period</span><strong>{item.model.test}</strong></div></div><p>{item.model.interval}</p><CarbonMarkets data={data} market={market} setMarket={setMarket}/></Detail></>}
-function EventsPage({data,market,setMarket}:{data:DashboardData;market:string;setMarket:(x:string)=>void}){const result=data.eventExperiment,delta=result.eventAware.rmse-result.baseline.rmse,improved=delta<0;const recent=[...data.events].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,5);return <><PageHead eyebrow="Climate and markets" title="Do Climate Events Affect Carbon Prices?" description="We compare carbon-price predictions with and without climate-event information."/><div className="v2-intro"><strong>What are we testing?</strong><span>Does adding recorded events help the model predict EU ETS carbon prices more accurately?</span></div><div className="v2-kpi-grid v2-kpi-grid-three"><Kpi label="Without Climate Events" value={`${num(result.baseline.rmse,3)} EUR`} detail="Prediction error on held-out EU ETS prices."/><Kpi label="With Climate Events" value={`${num(result.eventAware.rmse,3)} EUR`} detail="Same test period, with event information."/><Kpi label="Did Events Help?" value={improved?'Yes':'No'} detail={`${improved?'Error fell':'Error rose'} by ${num(Math.abs(result.improvementPct),2)}%.`} tone={improved?'down':'up'}/></div><Explain title="What does this mean?" tone={improved?'positive':'negative'}>{improved?`Adding event information lowered EU ETS prediction error by ${num(Math.abs(result.improvementPct),2)}%.`:`Adding event information did not improve EU ETS prediction in this test; prediction error rose by ${num(Math.abs(result.improvementPct),2)}%.`} This does not establish whether events caused price changes.</Explain><ChartCard title="Did event information improve the prediction?" subtitle="EU ETS model error · lower is better"><div className="v2-chart v2-chart-compact"><ResponsiveContainer width="100%" height="100%"><BarChart data={[{name:'Without events',error:result.baseline.rmse},{name:'With events',error:result.eventAware.rmse}]} layout="vertical" margin={{top:15,right:22,bottom:15,left:25}}><CartesianGrid horizontal={false} stroke="#e8edef"/><XAxis type="number" domain={[0,'auto']} tick={{fontSize:11}}/><YAxis dataKey="name" type="category" width={130} tick={{fontSize:11}}/><Tooltip formatter={(value:any)=>num(Number(value),3)}/><Bar dataKey="error" name="Prediction error" fill="#368e72" radius={[0,3,3,0]}/></BarChart></ResponsiveContainer></div></ChartCard><div className="v2-section-heading"><h2>Recent recorded climate events</h2><p>Five latest events from the supplied competition file.</p></div><div className="v2-event-list">{recent.map(e=><div key={`${e.date}-${e.description}`}><span>{e.date}</span><strong>{e.description}</strong><small>{e.region} · Severity {e.severity_score}</small></div>)}</div><Detail title="Event records, matching and model details"><p>The current comparison is for EU ETS only. The model uses recorded global and Europe events from the preceding 30 calendar days.</p><EventResults data={data} market={market} setMarket={setMarket}/></Detail></>}
-function CountryPage({data}:{data:DashboardData}){const [country,setCountry]=useState(data.countries[0]);const rows=yearRows(data,country),row=rows.at(-1)!,first=rows[0];const sources=[['Coal',row.coal_pct],['Oil',row.oil_pct],['Gas',row.gas_pct],['Nuclear',row.nuclear_pct],['Hydro',row.hydro_pct],['Solar',row.solar_pct],['Wind',row.wind_pct],['Other renewables',row.other_renewables_pct]] as const;const main=[...sources].sort((a,b)=>b[1]-a[1])[0];const category=data.archetypes.find(x=>x.country===country)?.category||'Unavailable';const bau=data.scenarios[country]?.['Business-as-Usual']?.forecast.at(-1)?.co2_emissions_mt;const change=row.co2_emissions_mt-first.co2_emissions_mt;const matchedEvents=data.events.filter(e=>e.region.toLowerCase()===row.region.toLowerCase());return <><PageHead eyebrow="Country profile" title={`Climate & Energy Profile — ${country}`} description="The country's latest emissions, energy mix, transition pattern and 2030 outlook in one place." controls={<LabeledSelect label="Country" value={country} onChange={setCountry} options={data.countries.map(x=>({value:x,label:x}))}/>}/><div className="v2-kpi-grid"><Kpi label="CO₂ Emissions" value={mt(row.co2_emissions_mt)} detail={`Observed in ${row.year}.`}/><Kpi label="CO₂ per Person" value={`${num(row.co2_per_capita_t,2)} tonnes`} detail="Emissions divided by population."/><Kpi label="Renewable Energy" value={`${num(row.renewables_total_pct)}%`} detail="Share of the energy mix."/><Kpi label="Fossil Fuels" value={`${num(row.fossil_total_pct)}%`} detail="Share of the energy mix."/></div><div className="v2-profile-strip"><span><strong>Main energy source</strong>{main[0]} · {num(main[1])}%</span><span><strong>Transition status</strong>{category}</span><span><strong>Current Trend in 2030</strong>{mt(bau)}</span></div><Explain>{`${country}'s CO₂ emissions ${change>=0?'increased':'decreased'} by ${num(Math.abs(change))} million tonnes between ${first.year} and ${row.year}. Renewables now make up ${num(row.renewables_total_pct)}% of its energy mix.`}</Explain><div className="v2-two"><ChartCard title={`How have ${country}'s emissions changed?`} subtitle={`Observed total CO₂, ${first.year}–${row.year} · million tonnes`}><div className="v2-chart v2-chart-compact"><ResponsiveContainer width="100%" height="100%"><AreaChart data={rows}><CartesianGrid vertical={false} stroke="#e8edef"/><XAxis dataKey="year" tick={{fontSize:10}}/><YAxis width={52} tick={{fontSize:10}}/><Tooltip formatter={(value:any)=>mt(Number(value))}/><Area dataKey="co2_emissions_mt" name="CO₂ emissions" stroke={chartColors.history} fill="#dcefe6" strokeWidth={2} isAnimationActive={false}/></AreaChart></ResponsiveContainer></div></ChartCard><ChartCard title="Renewable energy and fossil fuels" subtitle="Share of the country's energy mix over time"><div className="v2-chart v2-chart-compact"><ResponsiveContainer width="100%" height="100%"><LineChart data={rows}><CartesianGrid vertical={false} stroke="#e8edef"/><XAxis dataKey="year" tick={{fontSize:10}}/><YAxis width={45} unit="%" tick={{fontSize:10}}/><Tooltip formatter={(value:any)=>`${num(Number(value))}%`}/><Legend/><Line dataKey="renewables_total_pct" name="Renewables" stroke={chartColors.history} strokeWidth={2.3} dot={false} isAnimationActive={false}/><Line dataKey="fossil_total_pct" name="Fossil fuels" stroke={chartColors.fast} strokeWidth={2.3} dot={false} isAnimationActive={false}/></LineChart></ResponsiveContainer></div></ChartCard></div><Detail title="Full energy mix, 2030 paths and data context"><div className="v2-technical-kpis"><div><Term label="Emissions intensity" meaning="CO₂ emissions per unit of GDP in the supplied data."/><strong>{num(row.co2_intensity_kg_per_gdp_usd,3)} kg / GDP USD</strong></div><div><span>Region</span><strong>{row.region}</strong></div><div><span>Exact-region events</span><strong>{matchedEvents.length}</strong></div></div><div className="v2-country-table"><div><strong>Energy source</strong><strong>Share</strong></div>{sources.map(([name,value])=><div key={name}><span>{name}</span><span>{num(value)}%</span></div>)}</div><h3>2030 emissions by energy path</h3><div className="v2-country-table"><div><strong>Path</strong><strong>Projected CO₂</strong></div>{scenarioNames.map(name=><div key={name}><span>{scenarioLabels[name]}</span><span>{mt(data.scenarios[country][name].forecast.at(-1)?.co2_emissions_mt)}</span></div>)}</div><p>Climate events are counted only when the supplied event region exactly matches the country region. This does not establish a country-specific event impact.</p></Detail><Detail title="Original country charts and forecast comparison"><Country key={country} data={data} initialCountry={country}/></Detail></>}
-function ModelPage({data,setPage}:{data:DashboardData;setPage:(page:Page)=>void}){const carbon=data.carbon.EU_ETS||data.carbon[data.markets[0]],model=data.co2Model,event=data.eventExperiment;return <><PageHead eyebrow="Evidence behind the answers" title="Model Results" description="See what each model predicts, how it was checked, and where its limits are."/><div className="v2-intro"><strong>How to read this page</strong><span>Lower prediction error is better. A forecast is an estimate, while a model score measures performance on held-out historical data.</span></div><div className="v2-model-grid"><div className="v2-card"><span className="v2-model-number">01 / CARBON PRICE</span><h2>What are we predicting?</h2><p>Carbon prices 30 trading days ahead for five markets.</p><h3>Which model is used?</h3><p>Market-specific random forest forecasting.</p><h3>How accurate is it?</h3><p>For EU ETS, average percentage error was <strong>{num(carbon.model.mape,2)}%</strong> on held-out data.</p></div><div className="v2-card"><span className="v2-model-number">02 / CO₂ PER PERSON</span><h2>What are we predicting?</h2><p>Country CO₂ emissions per person from energy mix.</p><h3>Which model is used?</h3><p>{model.algorithm}.</p><h3>How accurate is it?</h3><p>Held-out <Term label="R²" meaning="A measure of how much variation the model explains in test data."/> was <strong>{num(model.r2,3)}</strong>; prediction error was <strong>{num(model.rmse,3)} tonnes per person</strong>.</p></div><Q2ResultsCard onOpen={()=>setPage('Climate Events')}/><div className="v2-card"><span className="v2-model-number">04 / 2030 PATHS</span><h2>What are we projecting?</h2><p>Emissions from 2026 to 2030 under three energy paths.</p><h3>How is it calculated?</h3><p>From observed country trends and transition patterns in the supplied data.</p></div></div><Detail title="Full model scores, features, training and test periods"><PerformanceResults data={data}/></Detail></>}
-function BusinessPage({data}:{data:DashboardData}){return <><PageHead eyebrow="Product vision" title="From Climate Data to Better Decisions" description="One place to connect carbon prices, climate events, emissions and energy-transition choices."/><div className="v2-intro"><strong>The problem</strong><span>Climate and energy evidence sits in separate files and models. Decision makers need a clear view of what is happening, what may happen next, and which assumptions matter.</span></div><div className="v2-section-heading"><h2>What CarbonScope helps users do</h2><p>Turn analytical outputs into questions that support a decision.</p></div><div className="v2-business-grid"><div className="v2-card"><TrendingUp size={19}/><h2>Watch carbon markets</h2><p>See the latest price, 30-day estimate and its measured prediction error.</p></div><div className="v2-card"><CloudSun size={19}/><h2>Test event signals</h2><p>See whether adding recorded climate events improved the EU ETS price model.</p></div><div className="v2-card"><Leaf size={19}/><h2>Understand emissions</h2><p>Connect energy shares with country CO₂ trends and a documented 2030 outlook.</p></div></div><div className="v2-two"><div className="v2-card"><h2>Who uses it?</h2><p>ESG analysts, sustainability teams, carbon-market participants, energy companies, and government or regulatory analysts.</p></div><div className="v2-card"><h2>How could it be offered?</h2><p>Professional and enterprise subscriptions, API access, or institutional licensing.</p><small>No revenue forecast is claimed.</small></div></div><Explain title="Why this matters">Users can inspect a result, the data behind it, and the limits of the model in one place. That makes the analysis easier to present and easier to challenge.</Explain><Detail title="Solution architecture and full business case"><Product/></Detail></>}
+function CarbonLine({
+  data,
+  market,
+  compact = false,
+}: {
+  data: DashboardData
+  market: string
+  compact?: boolean
+}) {
+  const item = data.carbon[market]
+  const history = item.history
+    .slice(compact ? -80 : -160)
+    .map((x) => ({ date: x.date, historical: x.price }))
+  const anchor = history.at(-1)
+  const points = [
+    ...history,
+    ...(anchor ? [{ date: anchor.date, predicted: anchor.historical }] : []),
+    ...item.forecast.map((x) => ({
+      date: x.date,
+      predicted: x.price,
+      lower: x.lower,
+      upper: x.upper,
+    })),
+  ]
+  return (
+    <div className={'v2-chart ' + (compact ? 'v2-chart-compact' : '')}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={points} margin={{ top: 15, right: 14, bottom: 4, left: 4 }}>
+          <CartesianGrid vertical={false} stroke="#e7edef" />
+          <XAxis dataKey="date" tick={{ fontSize: 10 }} minTickGap={48} />
+          <YAxis width={50} tick={{ fontSize: 10 }} domain={['auto', 'auto']} />
+          <Tooltip
+            formatter={(value: any, name: any) => [
+              `${num(Number(value), 2)} ${item.currency}`,
+              name,
+            ]}
+          />
+          <Legend verticalAlign="bottom" height={32} />
+          <ReferenceLine
+            x={item.latestDate}
+            stroke="#8ba0a6"
+            strokeDasharray="5 4"
+            label={{ value: 'Forecast starts', fontSize: 10, position: 'insideTopRight' }}
+          />
+          <Line
+            dataKey="historical"
+            name="Historical price"
+            stroke={chartColors.history}
+            strokeWidth={2.5}
+            dot={false}
+            isAnimationActive={false}
+          />
+          <Line
+            dataKey="predicted"
+            name="30-day forecast"
+            stroke={chartColors.moderate}
+            strokeWidth={2.6}
+            strokeDasharray="5 2"
+            dot={false}
+            isAnimationActive={false}
+          />
+          {!compact && (
+            <Line
+              dataKey="lower"
+              name="Approx. lower range"
+              stroke="#a5c8d2"
+              strokeDasharray="2 3"
+              dot={false}
+              isAnimationActive={false}
+            />
+          )}
+          {!compact && (
+            <Line
+              dataKey="upper"
+              name="Approx. upper range"
+              stroke="#a5c8d2"
+              strokeDasharray="2 3"
+              dot={false}
+              isAnimationActive={false}
+            />
+          )}
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  )
+}
+function OverviewPage({
+  data,
+  market,
+  setMarket,
+  setPage,
+}: {
+  data: DashboardData
+  market: string
+  setMarket: (x: string) => void
+  setPage: (x: Page) => void
+}) {
+  const item = data.carbon[market],
+    final = item.forecast.at(-1)!,
+    move = ((final.price - item.latest) / item.latest) * 100
+  const year = data.summary.latestYear,
+    latestRows = data.countriesData.filter((x) => x.year === year),
+    renew = latestRows.reduce((sum, row) => sum + row.renewables_total_pct, 0) / latestRows.length
+  return (
+    <>
+      <PageHead
+        eyebrow="Your starting point"
+        title="Climate & Energy Overview"
+        description="A quick view of carbon prices, emissions and the shift to cleaner energy."
+        controls={
+          <LabeledSelect
+            label="Carbon market"
+            value={market}
+            onChange={setMarket}
+            options={data.markets.map((x) => ({ value: x, label: x.replaceAll('_', ' ') }))}
+          />
+        }
+      />
+      <div className="v2-intro">
+        <strong>At a glance</strong>
+        <span>
+          {market.replaceAll('_', ' ')} is forecast to {move >= 0 ? 'rise' : 'fall'}{' '}
+          {num(Math.abs(move))}% over the next 30 trading days. Across the {latestRows.length}{' '}
+          countries in the dataset, the average renewable share is {num(renew)}% in {year}.
+        </span>
+      </div>
+      <div className="v2-kpi-grid">
+        <Kpi
+          label="Latest Carbon Price"
+          value={`${num(item.latest, 2)} ${item.currency}`}
+          detail={`Observed on ${item.latestDate}.`}
+        />
+        <Kpi
+          label="Expected Price Change"
+          value={`${signed(move)}%`}
+          detail="Model estimate over 30 trading days."
+          tone={move >= 0 ? 'up' : 'down'}
+        />
+        <Kpi
+          label="Renewable Energy Share"
+          value={`${num(renew)}%`}
+          detail={`Unweighted country average in ${year}.`}
+        />
+        <Kpi
+          label="Countries Covered"
+          value={String(data.summary.countryCount)}
+          detail="Countries with emissions and energy records."
+        />
+      </div>
+      <ChartCard
+        title={`Where could ${market.replaceAll('_', ' ')} prices go next?`}
+        subtitle="Solid line: observed prices. Dashed line: the 30-trading-day model forecast."
+      >
+        <CarbonLine data={data} market={market} compact />
+      </ChartCard>
+      <Explain>
+        {move >= 0
+          ? `The model estimates a higher ${market.replaceAll('_', ' ')} price after 30 trading days; the projected change is ${signed(move)}%.`
+          : `The model estimates a lower ${market.replaceAll('_', ' ')} price after 30 trading days; the projected change is ${signed(move)}%.`}{' '}
+        Forecasts are estimates, while the latest price is observed data.
+      </Explain>
+      <div className="v2-next-grid">
+        <button onClick={() => setPage('Carbon Price Forecast')}>
+          <TrendingUp size={18} />
+          <strong>Explore the price forecast</strong>
+          <span>See the predicted price and model accuracy.</span>
+        </button>
+        <button onClick={() => setPage('CO₂ & Energy')}>
+          <Leaf size={18} />
+          <strong>Explore CO₂ & energy</strong>
+          <span>See how energy choices relate to emissions.</span>
+        </button>
+        <button onClick={() => setPage('2030 Simulator')}>
+          <Target size={18} />
+          <strong>Explore 2030 paths</strong>
+          <span>Compare future emissions for a country.</span>
+        </button>
+      </div>
+      <Detail title="See more charts and data context">
+        <Overview data={data} market={market} setMarket={setMarket} />
+      </Detail>
+    </>
+  )
+}
+function CarbonPage({
+  data,
+  market,
+  setMarket,
+}: {
+  data: DashboardData
+  market: string
+  setMarket: (x: string) => void
+}) {
+  const item = data.carbon[market],
+    final = item.forecast.at(-1)!,
+    delta = final.price - item.latest,
+    move = (delta / item.latest) * 100
+  return (
+    <>
+      <PageHead
+        eyebrow="Carbon markets"
+        title="Carbon Price Forecast"
+        description="See recent carbon prices and the model's prediction for the next 30 trading days."
+        controls={
+          <LabeledSelect
+            label="Carbon market"
+            value={market}
+            onChange={setMarket}
+            options={data.markets.map((x) => ({ value: x, label: x.replaceAll('_', ' ') }))}
+          />
+        }
+      />
+      <div className="v2-intro">
+        <strong>What are we looking at?</strong>
+        <span>
+          Carbon markets set prices for emissions allowances. This page shows the selected market's
+          recent price and a model estimate for 30 trading days ahead.
+        </span>
+      </div>
+      <div className="v2-kpi-grid">
+        <Kpi
+          label="Current Price"
+          value={`${num(item.latest, 2)} ${item.currency}`}
+          detail={`Latest observed price, ${item.latestDate}.`}
+        />
+        <Kpi
+          label="Predicted Price"
+          value={`${num(final.price, 2)} ${item.currency}`}
+          detail={`Estimate for ${final.date}.`}
+        />
+        <Kpi
+          label="Expected Change"
+          value={`${signed(move)}%`}
+          detail={`${num(Math.abs(delta), 2)} ${item.currency} ${delta >= 0 ? 'higher' : 'lower'} than today.`}
+          tone={delta >= 0 ? 'up' : 'down'}
+        />
+        <Kpi
+          label="Prediction Accuracy"
+          value={`${num(item.model.mape, 2)}%`}
+          detail="Average percentage error on held-out data. Lower is better."
+        />
+      </div>
+      <Explain>
+        {`${market.replaceAll('_', ' ')} is projected to ${delta >= 0 ? 'rise' : 'fall'} from ${num(item.latest, 2)} to ${num(final.price, 2)} ${item.currency} over 30 trading days.`}{' '}
+        This is a model estimate, not a guaranteed future price.
+      </Explain>
+      <ChartCard
+        title={`${market.replaceAll('_', ' ')}: recent prices and 30-day forecast`}
+        subtitle="Historical prices end at the vertical boundary; the dashed line shows predicted prices."
+      >
+        <div className="v2-periods">
+          <span>
+            <b>OBSERVED</b> through {item.latestDate}
+          </span>
+          <span>
+            <b>FORECAST</b> next 30 trading days
+          </span>
+          <Term
+            label={item.currency}
+            meaning={`The market's quoted currency is ${item.currency}.`}
+          />
+        </div>
+        <CarbonLine data={data} market={market} />
+      </ChartCard>
+      <Detail title="Model details, uncertainty and market patterns">
+        <div className="v2-technical-kpis">
+          <div>
+            <Term
+              label="RMSE"
+              meaning="Root mean squared error: typical prediction error, expressed in the market currency."
+            />
+            <strong>
+              {num(item.model.rmse, 3)} {item.currency}
+            </strong>
+          </div>
+          <div>
+            <Term
+              label="MAPE"
+              meaning="Mean absolute percentage error: average size of prediction errors as a percentage."
+            />
+            <strong>{num(item.model.mape, 2)}%</strong>
+          </div>
+          <div>
+            <span>Test period</span>
+            <strong>{item.model.test}</strong>
+          </div>
+        </div>
+        <p>{item.model.interval}</p>
+        <CarbonMarkets data={data} market={market} setMarket={setMarket} />
+      </Detail>
+    </>
+  )
+}
+function CountryPage({ data }: { data: DashboardData }) {
+  const [country, setCountry] = useState(data.countries[0])
+  const rows = yearRows(data, country),
+    row = rows.at(-1)!,
+    first = rows[0]
+  const sources = [
+    ['Coal', row.coal_pct],
+    ['Oil', row.oil_pct],
+    ['Gas', row.gas_pct],
+    ['Nuclear', row.nuclear_pct],
+    ['Hydro', row.hydro_pct],
+    ['Solar', row.solar_pct],
+    ['Wind', row.wind_pct],
+    ['Other renewables', row.other_renewables_pct],
+  ] as const
+  const main = [...sources].sort((a, b) => b[1] - a[1])[0]
+  const change = row.co2_emissions_mt - first.co2_emissions_mt
+  const matchedEvents = data.events.filter(
+    (e) => e.region.toLowerCase() === row.region.toLowerCase(),
+  )
+  return (
+    <>
+      <PageHead
+        eyebrow="Country profile"
+        title={`Climate & Energy Profile — ${country}`}
+        description="The country's latest emissions, energy mix, transition pattern and 2030 outlook in one place."
+        controls={
+          <LabeledSelect
+            label="Country"
+            value={country}
+            onChange={setCountry}
+            options={data.countries.map((x) => ({ value: x, label: x }))}
+          />
+        }
+      />
+      <div className="v2-kpi-grid">
+        <Kpi
+          label="CO₂ Emissions"
+          value={mt(row.co2_emissions_mt)}
+          detail={`Observed in ${row.year}.`}
+        />
+        <Kpi
+          label="CO₂ per Person"
+          value={`${num(row.co2_per_capita_t, 2)} tonnes`}
+          detail="Emissions divided by population."
+        />
+        <Kpi
+          label="Renewable Energy"
+          value={`${num(row.renewables_total_pct)}%`}
+          detail="Share of the energy mix."
+        />
+        <Kpi
+          label="Fossil Fuels"
+          value={`${num(row.fossil_total_pct)}%`}
+          detail="Share of the energy mix."
+        />
+      </div>
+      <div className="v2-profile-strip">
+        <span>
+          <strong>Main energy source</strong>
+          {main[0]} · {num(main[1])}%
+        </span>
+      </div>
+      <Explain>{`${country}'s CO₂ emissions ${change >= 0 ? 'increased' : 'decreased'} by ${num(Math.abs(change))} million tonnes between ${first.year} and ${row.year}. Renewables now make up ${num(row.renewables_total_pct)}% of its energy mix.`}</Explain>
+      <div className="v2-two">
+        <ChartCard
+          title={`How have ${country}'s emissions changed?`}
+          subtitle={`Observed total CO₂, ${first.year}–${row.year} · million tonnes`}
+        >
+          <div className="v2-chart v2-chart-compact">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={rows}>
+                <CartesianGrid vertical={false} stroke="#e8edef" />
+                <XAxis dataKey="year" tick={{ fontSize: 10 }} />
+                <YAxis width={52} tick={{ fontSize: 10 }} />
+                <Tooltip formatter={(value: any) => mt(Number(value))} />
+                <Area
+                  dataKey="co2_emissions_mt"
+                  name="CO₂ emissions"
+                  stroke={chartColors.history}
+                  fill="#dcefe6"
+                  strokeWidth={2}
+                  isAnimationActive={false}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartCard>
+        <ChartCard
+          title="Renewable energy and fossil fuels"
+          subtitle="Share of the country's energy mix over time"
+        >
+          <div className="v2-chart v2-chart-compact">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={rows}>
+                <CartesianGrid vertical={false} stroke="#e8edef" />
+                <XAxis dataKey="year" tick={{ fontSize: 10 }} />
+                <YAxis width={45} unit="%" tick={{ fontSize: 10 }} />
+                <Tooltip formatter={(value: any) => `${num(Number(value))}%`} />
+                <Legend />
+                <Line
+                  dataKey="renewables_total_pct"
+                  name="Renewables"
+                  stroke={chartColors.history}
+                  strokeWidth={2.3}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+                <Line
+                  dataKey="fossil_total_pct"
+                  name="Fossil fuels"
+                  stroke={chartColors.fast}
+                  strokeWidth={2.3}
+                  dot={false}
+                  isAnimationActive={false}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartCard>
+      </div>
+      <Q3CountryStatus country={country} />
+      <Detail title="Full energy mix and data context">
+        <div className="v2-technical-kpis">
+          <div>
+            <Term
+              label="Emissions intensity"
+              meaning="CO₂ emissions per unit of GDP in the supplied data."
+            />
+            <strong>{num(row.co2_intensity_kg_per_gdp_usd, 3)} kg / GDP USD</strong>
+          </div>
+          <div>
+            <span>Region</span>
+            <strong>{row.region}</strong>
+          </div>
+          <div>
+            <span>Exact-region events</span>
+            <strong>{matchedEvents.length}</strong>
+          </div>
+        </div>
+        <div className="v2-country-table">
+          <div>
+            <strong>Energy source</strong>
+            <strong>Share</strong>
+          </div>
+          {sources.map(([name, value]) => (
+            <div key={name}>
+              <span>{name}</span>
+              <span>{num(value)}%</span>
+            </div>
+          ))}
+        </div>
+        <p>
+          Climate events are counted only when the supplied event region exactly matches the country
+          region. This does not establish a country-specific event impact.
+        </p>
+      </Detail>
+    </>
+  )
+}
+function ModelPage({ data, setPage }: { data: DashboardData; setPage: (page: Page) => void }) {
+  const carbon = data.carbon.EU_ETS || data.carbon[data.markets[0]],
+    model = data.co2Model
+  return (
+    <>
+      <PageHead
+        eyebrow="Evidence behind the answers"
+        title="Model Results"
+        description="See validated analysis methods, model scores, and current specialist connection limits."
+      />
+      <div className="v2-intro">
+        <strong>How to read this page</strong>
+        <span>
+          Lower prediction error is better. A forecast is an estimate, while a model score measures
+          performance on held-out historical data.
+        </span>
+      </div>
+      <div className="v2-model-grid">
+        <div className="v2-card">
+          <span className="v2-model-number">01 / CARBON PRICE</span>
+          <h2>What are we predicting?</h2>
+          <p>Carbon prices 30 trading days ahead for five markets.</p>
+          <h3>Which model is used?</h3>
+          <p>
+            Market-specific random forest forecasting in the existing dashboard export. The
+            delivered Q1 ARIMA analysis supplies the separate 30-day outlook in Sovereign Brief; its
+            live agent is awaiting integration.
+          </p>
+          <h3>How accurate is it?</h3>
+          <p>
+            For EU ETS, average percentage error was <strong>{num(carbon.model.mape, 2)}%</strong>{' '}
+            on held-out data.
+          </p>
+        </div>
+        <div className="v2-card">
+          <span className="v2-model-number">02 / CO₂ PER PERSON</span>
+          <h2>What are we predicting?</h2>
+          <p>Country CO₂ emissions per person from energy mix.</p>
+          <h3>Which model is used?</h3>
+          <p>
+            {model.algorithm} in the existing dashboard export. The requested XGBoost energy-mix
+            specialist has no connected trained artifact yet; its scores are awaiting integration.
+          </p>
+          <h3>How accurate is it?</h3>
+          <p>
+            Held-out{' '}
+            <Term
+              label="R²"
+              meaning="A measure of how much variation the model explains in test data."
+            />{' '}
+            was <strong>{num(model.r2, 3)}</strong>; prediction error was{' '}
+            <strong>{num(model.rmse, 3)} tonnes per person</strong>.
+          </p>
+        </div>
+        <Q2ResultsCard onOpen={() => setPage('Climate Events')} />
+      </div>
+      <Q3ResultsCard />
+      <Detail title="Full model scores, features, training and test periods">
+        <PerformanceResults data={data} />
+      </Detail>
+    </>
+  )
+}
+function BusinessPage({ data }: { data: DashboardData }) {
+  return (
+    <>
+      <PageHead
+        eyebrow="Product vision"
+        title="From Climate Data to Better Decisions"
+        description="One place to connect carbon prices, climate events, emissions and energy-transition choices."
+      />
+      <div className="v2-intro">
+        <strong>The problem</strong>
+        <span>
+          Climate and energy evidence sits in separate files and models. Decision makers need a
+          clear view of what is happening, what may happen next, and which assumptions matter.
+        </span>
+      </div>
+      <div className="v2-section-heading">
+        <h2>What Monsoon Mandate helps users do</h2>
+        <p>Turn analytical outputs into questions that support a decision.</p>
+      </div>
+      <div className="v2-business-grid">
+        <div className="v2-card">
+          <TrendingUp size={19} />
+          <h2>Watch carbon markets</h2>
+          <p>See the latest price, 30-day estimate and its measured prediction error.</p>
+        </div>
+        <div className="v2-card">
+          <CloudSun size={19} />
+          <h2>Test event signals</h2>
+          <p>See the marginal impact of event features in the pooled Q2 carbon-price experiment.</p>
+        </div>
+        <div className="v2-card">
+          <Leaf size={19} />
+          <h2>Understand emissions</h2>
+          <p>Connect energy shares with country CO₂ trends and a documented 2030 outlook.</p>
+        </div>
+      </div>
+      <div className="v2-two">
+        <div className="v2-card">
+          <h2>Who uses it?</h2>
+          <p>
+            Primary: energy, environment and finance ministries, plus disaster agencies. Secondary:
+            ESG and sustainability teams. South Asia first, beginning with Bangladesh, India and
+            Pakistan, which are present in the supplied dataset.
+          </p>
+        </div>
+        <div className="v2-card">
+          <h2>How could it be offered?</h2>
+          <p>Government license + SaaS subscriptions + API access.</p>
+          <small>No revenue forecast is claimed.</small>
+        </div>
+      </div>
+      <Explain title="Why this matters">
+        Users can inspect a result, the data behind it, and the limits of the model in one place.
+        That makes the analysis easier to present and easier to challenge.
+      </Explain>
+      <Detail title="Solution architecture and full business case">
+        <Product />
+      </Detail>
+    </>
+  )
+}
 
-function PageContent({data,page,market,setMarket,setPage}:{data:DashboardData;page:Page;market:string;setMarket:(s:string)=>void;setPage:(p:Page)=>void}){switch(page){case 'Overview':return <OverviewPage data={data} market={market} setMarket={setMarket} setPage={setPage}/>;case 'Carbon Price Forecast':return <ConnectedCarbonPage data={data} market={market} setMarket={setMarket}><CarbonPage data={data} market={market} setMarket={setMarket}/></ConnectedCarbonPage>;case 'CO₂ & Energy':return <CO2EnergyPage data={data}/>;case 'Climate Events':return <Q2EventsPage data={data}/>;case '2030 Simulator':return <ScenarioSimulator data={data}/>;case 'Country Explorer':return <CountryPage data={data}/>;case 'Model Results':return <ModelPage data={data} setPage={setPage}/>;case 'Business Case':return <BusinessPage data={data}/>;case 'Data Quality':return <Quality data={data}/>}}
-export default function DashboardV2(){const [data,setData]=useState<DashboardData|null>(null);const [error,setError]=useState('');const [page,setPage]=useState<Page>('Overview');const [market,setMarket]=useState('');const [assistantOpen,setAssistantOpen]=useState(false);useEffect(()=>{fetch('/data/dashboard.json').then(r=>{if(!r.ok)throw new Error('Dashboard data export is unavailable');return r.json()}).then((result:DashboardData)=>{setData(result);setMarket(result.markets.includes('EU_ETS')?'EU_ETS':result.markets[0]||'')}).catch(e=>setError(String(e)))},[]);return <div className="v2-shell"><aside className="v2-sidebar"><div className="v2-brand">◈ CarbonScope<span>INTELLIGENCE</span></div><nav aria-label="Main navigation">{navigation.map(([label,Icon])=><button key={label} className={page===label?'v2-active':''} onClick={()=>setPage(label)}><Icon size={17}/>{label}</button>)}</nav><div className="v2-sidebar-bottom"><details><summary><Database size={16}/> Data & technical</summary><button className={page==='Data Quality'?'v2-active':''} onClick={()=>setPage('Data Quality')}>Data Quality</button></details><div className="v2-data-status"><span/>Competition data loaded<br/>Through {data?.summary.latestYear||'—'}</div></div></aside><div className="v2-main"><header className="v2-topbar"><strong>{page}</strong><div><span className="v2-header-status">Data through {data?.summary.latestYear||'—'}</span><button className="assistant-launch" onClick={()=>setAssistantOpen(true)}><MessageCircle size={15}/><span>Ask assistant</span></button></div></header><main className="v2-content">{error?<div className="v2-error">{error}. Run build_data.py to regenerate the local data export.</div>:!data||!market?<div className="v2-loading">Loading competition data…</div>:<PageContent data={data} page={page} market={market} setMarket={setMarket} setPage={setPage}/>}</main></div>{data&&<AssistantPanel data={data} open={assistantOpen} onClose={()=>setAssistantOpen(false)}/>}</div>}
-
+function PageContent({
+  data,
+  page,
+  market,
+  setMarket,
+  setPage,
+}: {
+  data: DashboardData
+  page: Page
+  market: string
+  setMarket: (s: string) => void
+  setPage: (p: Page) => void
+}) {
+  switch (page) {
+    case 'Overview':
+      return <OverviewPage data={data} market={market} setMarket={setMarket} setPage={setPage} />
+    case 'Carbon Price Forecast':
+      return (
+        <ConnectedCarbonPage data={data} market={market} setMarket={setMarket}>
+          <CarbonPage data={data} market={market} setMarket={setMarket} />
+        </ConnectedCarbonPage>
+      )
+    case 'CO₂ & Energy':
+      return <CO2EnergyPage data={data} />
+    case 'Climate Events':
+      return <Q2EventsPage data={data} />
+    case '2030 Simulator':
+      return <ScenarioSimulator data={data} />
+    case 'Country Explorer':
+      return <CountryPage data={data} />
+    case 'Model Results':
+      return <ModelPage data={data} setPage={setPage} />
+    case 'Sovereign Brief':
+      return <SovereignBrief data={data} />
+    case 'Business Case':
+      return <BusinessPage data={data} />
+    case 'Data Quality':
+      return <Quality data={data} />
+  }
+}
+export default function DashboardV2() {
+  const [data, setData] = useState<DashboardData | null>(null)
+  const [error, setError] = useState('')
+  const [page, setPage] = useState<Page>('Overview')
+  const [market, setMarket] = useState('')
+  const [assistantOpen, setAssistantOpen] = useState(false)
+  const [q2Summary, setQ2Summary] = useState<Q2Summary | null>(null)
+  useEffect(() => {
+    getQ2Summary()
+      .then((result) => {
+        if (result.status === 'success') setQ2Summary(result)
+      })
+      .catch(() => setQ2Summary(null))
+  }, [])
+  useEffect(() => {
+    fetch('/data/dashboard.json')
+      .then((r) => {
+        if (!r.ok) throw new Error('Dashboard data export is unavailable')
+        return r.json()
+      })
+      .then((result: DashboardData) => {
+        setData(result)
+        setMarket(result.markets.includes('EU_ETS') ? 'EU_ETS' : result.markets[0] || '')
+      })
+      .catch((e) => setError(String(e)))
+  }, [])
+  return (
+    <div className="v2-shell">
+      <aside className="v2-sidebar">
+        <div className="v2-brand">
+          ◈ Monsoon Mandate<span>HELIOS PANE</span>
+        </div>
+        <nav aria-label="Main navigation">
+          {navigation.map(([label, Icon]) => (
+            <button
+              key={label}
+              className={page === label ? 'v2-active' : ''}
+              onClick={() => setPage(label)}
+            >
+              <Icon size={17} />
+              {label}
+            </button>
+          ))}
+        </nav>
+        <div className="v2-sidebar-bottom">
+          <details>
+            <summary>
+              <Database size={16} /> Data & technical
+            </summary>
+            <button
+              className={page === 'Data Quality' ? 'v2-active' : ''}
+              onClick={() => setPage('Data Quality')}
+            >
+              Data Quality
+            </button>
+          </details>
+          <div className="v2-data-status">
+            <span />
+            Competition data loaded
+            <br />
+            Through {data?.summary.latestYear || '—'}
+          </div>
+        </div>
+      </aside>
+      <div className="v2-main">
+        <header className="v2-topbar">
+          <strong>{page}</strong>
+          <div>
+            <span className="v2-header-status">Data through {data?.summary.latestYear || '—'}</span>
+            <button className="assistant-launch" onClick={() => setAssistantOpen(true)}>
+              <MessageCircle size={15} />
+              <span>Briefwright</span>
+            </button>
+          </div>
+        </header>
+        <main className="v2-content">
+          {error ? (
+            <div className="v2-error">
+              {error}. Run build_data.py to regenerate the local data export.
+            </div>
+          ) : !data || !market ? (
+            <div className="v2-loading">Loading competition data…</div>
+          ) : (
+            <PageContent
+              data={data}
+              page={page}
+              market={market}
+              setMarket={setMarket}
+              setPage={setPage}
+            />
+          )}
+        </main>
+      </div>
+      {data && (
+        <AssistantPanel
+          data={q2Summary ? { ...data, q2Summary } : data}
+          open={assistantOpen}
+          onClose={() => setAssistantOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
