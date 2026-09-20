@@ -1,0 +1,29 @@
+{
+    "name": "carbonscope-intelligence",
+    "version": "0.1.0",
+    "private": true,
+    "scripts": {
+        "dev": "start http://localhost:3000 && node node_modules/next/dist/bin/next dev",
+        "build": "node node_modules/next/dist/bin/next build",
+        "start": "node node_modules/next/dist/bin/next start",
+        "test:assistant": "node tests/assistant-validation.cjs"
+    },
+    "dependencies": {
+        "next": "14.2.4",
+        "react": "18.3.1",
+        "react-dom": "18.3.1",
+        "recharts": "3.8.1",
+        "lucide-react": "0.563.0",
+        "clsx": "^2.1.1",
+        "tailwind-merge": "^3.0.0"
+    },
+    "devDependencies": {
+        "typescript": "^5.8.0",
+        "@types/react": "^18.3.0",
+        "@types/react-dom": "^18.3.0",
+        "@types/node": "^22.0.0",
+        "tailwindcss": "^3.4.0",
+        "postcss": "^8.4.0",
+        "autoprefixer": "^10.4.0"
+    }
+}
