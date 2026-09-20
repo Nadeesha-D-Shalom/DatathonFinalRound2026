@@ -1,0 +1,30 @@
+{
+    "task": "Q2 Climate and Policy Event Impact",
+    "model_type": "Ridge Regression",
+    "baseline": {
+        "rmse": 1.8584551853868319,
+        "mae": 1.3296780490954112,
+        "mape_percent": 2.2586249477664166
+    },
+    "event_aware": {
+        "rmse": 1.8580132724625467,
+        "mae": 1.334221679346193,
+        "mape_percent": 2.274981587581822
+    },
+    "rmse_improvement_percent": 0.023778508503190507,
+    "mape_improvement_percent": -0.7241857410448083,
+    "event_window": {
+        "rows": 75,
+        "baseline_rmse": 1.759086716631848,
+        "event_aware_rmse": 1.7582970856089881,
+        "improvement_percent": 0.04488869226252887
+    },
+    "important_event_features": [
+        "events_30d",
+        "max_severity_30d",
+        "events_7d",
+        "max_severity_7d",
+        "days_since_last_event"
+    ],
+    "interpretation": "Event features produced negligible improvement in short-term carbon-price level prediction. Historical price dynamics remained the dominant predictive signal."
+}

@@ -1,0 +1,10 @@
+feature,description,leakage_safe
+days_since_last_event,Days elapsed since most recent relevant event,True
+events_7d,Number of relevant events during previous 7 days,True
+events_30d,Number of relevant events during previous 30 days,True
+max_severity_7d,Maximum event severity during previous 7 days,True
+max_severity_30d,Maximum event severity during previous 30 days,True
+policy_events_30d,Number of policy events during previous 30 days,True
+weather_events_30d,Number of extreme-weather events during previous 30 days,True
+disaster_events_30d,Number of disaster events during previous 30 days,True
+event_shock_score,Severity-weighted exponentially decaying recent-event signal,True

@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 
 from backend.schemas.requests import CarbonForecastRequest, CO2PredictionRequest, ScenarioComparisonRequest
 from backend.supervisor import Supervisor
+from backend.services.country_data_service import CountryNotFound, DatasetError, get_countries, get_country_energy_co2
 
 
 app = FastAPI(title="CarbonScope Prediction Backend", version="0.1.0")
@@ -25,6 +26,24 @@ def health():
     return {"status": "ok", "carbon_model": "connected" if supervisor.carbon_agent.connected else "not_connected", "co2_model": "connected" if supervisor.co2_agent.connected else "not_connected"}
 
 
+@app.get("/api/countries")
+def countries():
+    try:
+        return {"status": "success", "countries": get_countries()}
+    except DatasetError:
+        return JSONResponse(status_code=503, content={"status": "dataset_error", "message": "Country datasets are unavailable or invalid."})
+
+
+@app.get("/api/countries/{country}/energy-co2")
+def country_energy_co2(country: str):
+    try:
+        return get_country_energy_co2(country)
+    except CountryNotFound:
+        return JSONResponse(status_code=404, content={"status": "country_not_found", "message": "This country is not available in the supplied datasets."})
+    except DatasetError:
+        return JSONResponse(status_code=503, content={"status": "dataset_error", "message": "Country datasets are unavailable or invalid."})
+
+
 @app.post("/api/carbon/forecast")
 def carbon_forecast(request: CarbonForecastRequest):
     return supervisor.run("carbon_forecast", request.model_dump())
@@ -38,3 +57,23 @@ def co2_predict(request: CO2PredictionRequest):
 @app.post("/api/scenario/compare")
 def scenario_compare(request: ScenarioComparisonRequest):
     return supervisor.run("compare_2030_scenario", request.model_dump())
+
+
+@app.get("/api/q2/summary")
+def q2_summary():
+    return supervisor.run("q2_event_impact", {})
+
+
+@app.get("/api/q2/feature-importance")
+def q2_feature_importance():
+    return supervisor.run("q2_feature_importance", {})
+
+
+@app.get("/api/q2/event-window-analysis")
+def q2_event_window_analysis():
+    return supervisor.run("q2_event_window", {})
+
+
+@app.get("/api/q2/impact-results")
+def q2_impact_results():
+    return supervisor.run("q2_impact_results", {})

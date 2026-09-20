@@ -1,0 +1,5 @@
+metric,value
+event_window_rows,75.0
+baseline_event_window_rmse,1.759086716631848
+event_aware_event_window_rmse,1.7582970856089881
+event_window_improvement_percent,0.04488869226252887

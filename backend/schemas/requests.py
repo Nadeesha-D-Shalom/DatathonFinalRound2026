@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class EnergyMix(BaseModel):
@@ -34,4 +34,11 @@ class CO2PredictionRequest(BaseModel):
 
 class ScenarioComparisonRequest(CO2PredictionRequest):
     country: str = Field(min_length=1)
-    target_year: Literal[2030] = 2030
+    target_year: Literal[2027, 2028, 2029, 2030] = 2030
+
+    @field_validator("target_year", mode="before")
+    @classmethod
+    def require_integer_year(cls, value):
+        if type(value) is not int:
+            raise ValueError("Forecast year must be an integer from 2027 through 2030.")
+        return value
