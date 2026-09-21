@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Area,
   AreaChart,
@@ -13,7 +13,6 @@ import {
   YAxis,
 } from 'recharts'
 import {
-  BackendUnavailableError,
   getCountries,
   getCountryEnergyCO2,
   predictCO2,
@@ -21,7 +20,6 @@ import {
   type CountryEnergyCO2,
   type EnergyMix,
 } from '@/lib/api/client'
-import { localCountryProfile } from '@/lib/api/observed-fallback'
 import { balanceEnergyMix, rebalanceEnergyMix } from '@/lib/calculations/energy-mix'
 import type { DashboardData } from '@/lib/assistant/types'
 import Q3CountryStatus from '@/components/q3/Q3CountryStatus'
@@ -69,13 +67,12 @@ export default function CO2EnergyPage({ data }: { data: DashboardData }) {
   const [loadingCountry, setLoadingCountry] = useState(true)
   const [loadingPrediction, setLoadingPrediction] = useState(false)
   const [retry, setRetry] = useState(0)
-  const [backendOffline, setBackendOffline] = useState(false)
+  const requestVersion = useRef(0)
 
   useEffect(() => {
     let active = true
     setCountryError('')
     setLoadingCountry(true)
-    setBackendOffline(false)
     getCountries()
       .then((response) => {
         if (!active) return
@@ -90,15 +87,7 @@ export default function CO2EnergyPage({ data }: { data: DashboardData }) {
       })
       .catch((error) => {
         if (!active) return
-        if (error instanceof BackendUnavailableError) {
-          const available = [...data.countries].sort((a, b) => a.localeCompare(b))
-          setCountries(available)
-          setBackendOffline(true)
-          if (available.length)
-            setCountry((previous) => (available.includes(previous) ? previous : available[0]))
-          else setCountryError('The competition data export contains no country records.')
-        } else
-          setCountryError(error instanceof Error ? error.message : 'Country list is unavailable.')
+        setCountryError(error instanceof Error ? error.message : 'Country list is unavailable.')
         setLoadingCountry(false)
       })
     return () => {
@@ -107,6 +96,8 @@ export default function CO2EnergyPage({ data }: { data: DashboardData }) {
   }, [retry, data])
 
   useEffect(() => {
+    requestVersion.current += 1
+    setLoadingPrediction(false)
     if (!country) return
     let active = true
     setLoadingCountry(true)
@@ -117,20 +108,6 @@ export default function CO2EnergyPage({ data }: { data: DashboardData }) {
     setPredictionMessage('Checking specialist model…')
     setCustomPrediction(null)
     setCustomMessage('')
-    if (backendOffline) {
-      const local = localCountryProfile(data, country)
-      if (local) {
-        setProfile(local)
-        setMix(mixFromProfile(local))
-        setPredictionMessage(
-          'Final CO₂ prediction model is unavailable while the backend is offline.',
-        )
-      } else setCountryError('This country is unavailable in the competition data export.')
-      setLoadingCountry(false)
-      return () => {
-        active = false
-      }
-    }
     getCountryEnergyCO2(country)
       .then(async (record) => {
         if (!active) return
@@ -138,7 +115,7 @@ export default function CO2EnergyPage({ data }: { data: DashboardData }) {
         setMix(mixFromProfile(record))
         setLoadingCountry(false)
         try {
-          const response = await predictCO2(mixFromProfile(record))
+          const response = await predictCO2(mixFromProfile(record), record.latest_year)
           if (!active) return
           if (response.status === 'success') {
             setObservedPrediction(response)
@@ -153,24 +130,13 @@ export default function CO2EnergyPage({ data }: { data: DashboardData }) {
       })
       .catch((error) => {
         if (!active) return
-        if (error instanceof BackendUnavailableError) {
-          const local = localCountryProfile(data, country)
-          if (local) {
-            setProfile(local)
-            setMix(mixFromProfile(local))
-            setBackendOffline(true)
-            setPredictionMessage(
-              'Final CO₂ prediction model is unavailable while the backend is offline.',
-            )
-          } else setCountryError('This country is unavailable in the competition data export.')
-        } else
-          setCountryError(error instanceof Error ? error.message : 'Country data is unavailable.')
+        setCountryError(error instanceof Error ? error.message : 'Country data is unavailable.')
         setLoadingCountry(false)
       })
     return () => {
       active = false
     }
-  }, [country, retry, backendOffline, data])
+  }, [country, retry, data])
 
   const total = mix ? sources.reduce((sum, { key }) => sum + mix[key], 0) : 0
   const valid =
@@ -178,6 +144,8 @@ export default function CO2EnergyPage({ data }: { data: DashboardData }) {
     sources.every(({ key }) => Number.isFinite(mix[key]) && mix[key] >= 0 && mix[key] <= 100) &&
     Math.abs(total - 100) <= 0.5
   function changeMix(key: keyof EnergyMix, raw: string) {
+    requestVersion.current += 1
+    setLoadingPrediction(false)
     setMix((previous) =>
       previous ? rebalanceEnergyMix(previous, key, raw === '' ? 0 : Number(raw)) : previous,
     )
@@ -185,18 +153,20 @@ export default function CO2EnergyPage({ data }: { data: DashboardData }) {
     setCustomMessage('')
   }
   async function runCustomPrediction() {
-    if (!mix || !valid || backendOffline) return
+    if (!mix || !valid) return
+    const version = ++requestVersion.current
     setLoadingPrediction(true)
     setCustomPrediction(null)
     setCustomMessage('')
     try {
-      const response = await predictCO2(mix)
+      const response = await predictCO2(mix, profile?.latest_year ?? 2026)
+      if (version !== requestVersion.current) return
       if (response.status === 'success') setCustomPrediction(response)
       else setCustomMessage(response.message)
     } catch (error) {
-      setCustomMessage(error instanceof Error ? error.message : 'Prediction is unavailable.')
+      if (version === requestVersion.current) setCustomMessage(error instanceof Error ? error.message : 'Prediction is unavailable.')
     } finally {
-      setLoadingPrediction(false)
+      if (version === requestVersion.current) setLoadingPrediction(false)
     }
   }
 
@@ -267,25 +237,13 @@ export default function CO2EnergyPage({ data }: { data: DashboardData }) {
           Loading observed country data…
         </div>
       )}
-      {backendOffline && profile && !countryError && (
-        <div className="v2-live-status" role="status">
-          <strong>Observed data available</strong>
-          <span>
-            Using the existing export generated from the competition CSVs. Live model predictions
-            need the FastAPI backend.
-          </span>
-          <button className="co2-retry" onClick={() => setRetry((value) => value + 1)}>
-            Reconnect backend
-          </button>
-        </div>
-      )}
       {profile && !countryError && (
         <>
           <div className="v2-intro">
             <strong>Observed vs predicted</strong>
             <span>
               Observed values come from the competition CSVs. A model estimate appears only when the
-              final CO₂ specialist is connected.
+              final CO₂ specialist is connected. Its estimate uses the selected country&apos;s latest observed year.
             </span>
           </div>
           <div className="v2-kpi-grid">
@@ -309,7 +267,7 @@ export default function CO2EnergyPage({ data }: { data: DashboardData }) {
               value={
                 observedPrediction
                   ? `${fmt(observedPrediction.co2_per_capita_t, 2)} t/person`
-                  : 'Awaiting model'
+                  : 'Not available'
               }
               detail="Specialist model estimate from the latest observed energy mix"
             />
@@ -463,6 +421,8 @@ export default function CO2EnergyPage({ data }: { data: DashboardData }) {
                   type="button"
                   className="plan-secondary"
                   onClick={() => {
+                  requestVersion.current += 1
+                  setLoadingPrediction(false)
                     if (mix) setMix(balanceEnergyMix(mix))
                     setCustomPrediction(null)
                     setCustomMessage('')
@@ -474,6 +434,8 @@ export default function CO2EnergyPage({ data }: { data: DashboardData }) {
                   type="button"
                   className="plan-secondary"
                   onClick={() => {
+                  requestVersion.current += 1
+                  setLoadingPrediction(false)
                     setMix(mixFromProfile(profile))
                     setCustomPrediction(null)
                     setCustomMessage('')
@@ -483,7 +445,7 @@ export default function CO2EnergyPage({ data }: { data: DashboardData }) {
                 </button>
                 <button
                   onClick={runCustomPrediction}
-                  disabled={!valid || loadingPrediction || backendOffline}
+                  disabled={!valid || loadingPrediction}
                 >
                   {loadingPrediction ? 'Predicting…' : 'Predict CO₂'}
                 </button>
@@ -524,8 +486,7 @@ export default function CO2EnergyPage({ data }: { data: DashboardData }) {
                 </p>
               ) : (
                 <p>
-                  Final model name, input feature order, R² and RMSE will appear once the trained
-                  specialist model is connected.
+                  Final model details are unavailable from the running specialist.
                 </p>
               )}
               <p>Observed source files: co2_emissions_yearly.csv and energy_mix_yearly.csv.</p>

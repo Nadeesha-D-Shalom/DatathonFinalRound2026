@@ -1,12 +1,15 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
+import { getBrief, type Brief } from '@/lib/api/brief'
 import type { DashboardData } from '@/lib/assistant/types'
 import {
   getCountryEnergyCO2,
   getCarbonAnalysisOutlook,
+  predictCO2,
   type CarbonAnalysisOutlook,
   type CountryEnergyCO2,
+  type CO2PredictionSuccess,
 } from '@/lib/api/client'
 import { getCountryTransition, getCountry2030Summary, type Q3Transition } from '@/lib/api/q3'
 import { getQ2Summary, type Q2Summary } from '@/lib/api/q2'
@@ -42,6 +45,7 @@ export default function SovereignBrief({ data }: { data: DashboardData }) {
   )
   const [market, setMarket] = useState(data.markets.includes('EU_ETS') ? 'EU_ETS' : data.markets[0])
   const [observed, setObserved] = useState<CountryEnergyCO2 | null>(null)
+  const [co2Estimate, setCO2Estimate] = useState<CO2PredictionSuccess | null>(null)
   const [transition, setTransition] = useState<Q3Transition | null>(null)
   const [scenario, setScenario] = useState<Scenario2030 | null>(null)
   const [outlook, setOutlook] = useState<CarbonAnalysisOutlook | null>(null)
@@ -50,80 +54,28 @@ export default function SovereignBrief({ data }: { data: DashboardData }) {
   const [forecastMessage, setForecastMessage] = useState('Loading validated Q3 pathways…')
   const [outlookMessage, setOutlookMessage] = useState('Loading delivered Q1 outlook…')
 
+  const [aggregate, setAggregate] = useState<Brief | null>(null)
   useEffect(() => {
     let active = true
-    setObserved(null)
-    setTransition(null)
-    setScenario(null)
-    setCountryError('')
-    setForecastMessage('Loading validated Q3 pathways…')
-    Promise.allSettled([
-      getCountryEnergyCO2(country),
-      getCountryTransition(country),
-      getCountry2030Summary(country),
-    ]).then(([a, b, c]) => {
+    setAggregate(null)
+    setObserved(null); setCO2Estimate(null); setTransition(null); setScenario(null); setOutlook(null); setQ2(null)
+    setCountryError(''); setForecastMessage('Loading validated Q3 pathways...'); setOutlookMessage('Loading ARIMA outlook...')
+    getBrief(country, market).then(value => {
       if (!active) return
-      if (a.status === 'fulfilled' && a.value.status === 'success') setObserved(a.value)
-      else
-        setCountryError(
-          'Observed country data is not available from FastAPI. Start or restart the backend.',
-        )
-      if (b.status === 'fulfilled' && b.value.status === 'success') setTransition(b.value)
-      if (c.status === 'fulfilled' && c.value.status === 'success') {
-        setScenario(c.value)
-        setForecastMessage('')
-      } else
-        setForecastMessage('Validated Q3 2030 scenario output is not available for this country.')
-    })
-    return () => {
-      active = false
-    }
-  }, [country])
-
-  useEffect(() => {
-    let active = true
-    setOutlook(null)
-    setOutlookMessage('Loading delivered Q1 outlook…')
-    getCarbonAnalysisOutlook(market)
-      .then((value) => {
-        if (!active) return
-        if (value.status === 'success') {
-          setOutlook(value)
-          setOutlookMessage('')
-        } else setOutlookMessage(value.message)
-      })
-      .catch(() => {
-        if (active)
-          setOutlookMessage(
-            'ARIMA analysis outlook is awaiting integration with the running backend.',
-          )
-      })
-    return () => {
-      active = false
-    }
-  }, [market])
-
-  useEffect(() => {
-    getQ2Summary()
-      .then((value) => {
-        if (value.status === 'success') setQ2(value)
-      })
-      .catch(() => setQ2(null))
-  }, [])
-
-  const eventContext = useMemo(
-    () =>
-      data.events
-        .filter(
-          (event) =>
-            event.region.toLowerCase() === country.toLowerCase() ||
-            (observed && event.region.toLowerCase() === observed.region.toLowerCase()),
-        )
-        .sort((a, b) => b.date.localeCompare(a.date))
-        .slice(0, 3),
-    [data.events, country, observed],
-  )
-  const latestTemperature = data.temperature.at(-1)
+      if (value.status !== 'success') throw new Error('Brief data unavailable.')
+      setAggregate(value); setObserved(value.observed)
+      if (value.co2_estimate.status === 'success') setCO2Estimate(value.co2_estimate)
+      if (value.transition.status === 'success') setTransition(value.transition)
+      if (value.scenario.status === 'success') { setScenario(value.scenario); setForecastMessage('') }
+      else setForecastMessage('Validated Q3 scenario not available for this country.')
+      if (value.outlook.status === 'success') { setOutlook(value.outlook); setOutlookMessage('') }
+      else setOutlookMessage('Validated ARIMA outlook unavailable.')
+      if (value.q2.status === 'success') setQ2(value.q2)
+    }).catch(() => { if (active) { setCountryError('Brief service is unavailable. Please try again.'); setForecastMessage('Unavailable'); setOutlookMessage('Unavailable') } })
+    return () => { active = false }
+  }, [country, market])
+  const eventContext = aggregate?.events || []
+  const latestTemperature = aggregate?.temperature
   const difference = scenario ? scenario.BAU - scenario.Accelerated : undefined
   const reductionPercent =
     scenario && scenario.BAU > 0 ? (difference! / scenario.BAU) * 100 : undefined
@@ -133,13 +85,16 @@ export default function SovereignBrief({ data }: { data: DashboardData }) {
       <div className="v2-page-head">
         <div>
           <span className="v2-eyebrow">Decision brief · supplied data</span>
-          <h1>Mandate 2030 Sovereign Climate &amp; Energy Brief</h1>
+          <h1>Mandate 2030 Sovereign Brief</h1>
           <p>
             A concise, source-labeled country view for policy and investment decisions. Scenarios
             are conditional, not guaranteed outcomes.
           </p>
         </div>
         <div className="v2-controls">
+          <button type="button" className="plan-secondary brief-print" onClick={() => window.print()} disabled={!aggregate}>
+            Print / Save PDF
+          </button>
           <label className="v2-select">
             <span>Country</span>
             <select value={country} onChange={(event) => setCountry(event.target.value)}>
@@ -170,12 +125,12 @@ export default function SovereignBrief({ data }: { data: DashboardData }) {
       <div className="v2-kpi-grid">
         <BriefItem
           label="Transition archetype"
-          value={transition?.trajectory ?? 'Awaiting integration'}
+          value={transition?.trajectory ?? 'Not available'}
           source="Q3 transition analysis"
         />
         <BriefItem
           label="Transition Score"
-          value={transition ? fmt(transition.transition_score) : 'Awaiting integration'}
+          value={transition ? fmt(transition.transition_score) : 'Not available'}
           source="Q3 country transition fingerprints"
         />
         <BriefItem
@@ -192,6 +147,11 @@ export default function SovereignBrief({ data }: { data: DashboardData }) {
           label="CO₂ per person"
           value={observed ? `${fmt(observed.co2.co2_per_capita_t)} t/person` : 'Not available'}
           source={`Observed emissions${observed ? ` · ${observed.latest_year}` : ''}`}
+        />
+        <BriefItem
+          label="Energy-mix model estimate"
+          value={co2Estimate ? `${fmt(co2Estimate.co2_per_capita_t)} t/person` : 'Not available'}
+          source={co2Estimate ? `${co2Estimate.model.name} · observed ${co2Estimate.year} mix · Q1.2` : 'Q1.2 specialist model'}
         />
         <BriefItem
           label="Temperature anomaly"
@@ -277,7 +237,7 @@ export default function SovereignBrief({ data }: { data: DashboardData }) {
           )}
           <small>
             {outlook
-              ? `${outlook.model} · delivered Q1 analysis export. Live Carbon agent awaits integration. Source: ${outlook.source}.`
+              ? `${outlook.model} · validated Q1 ARIMA output served through the Carbon specialist. Source: ${outlook.source}.`
               : 'No carbon price value is inferred from country CO₂ or events.'}
           </small>
         </section>

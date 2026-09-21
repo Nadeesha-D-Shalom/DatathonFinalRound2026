@@ -1,4 +1,6 @@
 'use client'
+import { getDashboard } from '@/lib/api/dashboard'
+import CarbonModelResults from '@/components/carbon/CarbonModelResults'
 import { useEffect, useMemo, useState } from 'react'
 import {
   Area,
@@ -38,6 +40,7 @@ import AssistantPanel from '@/components/assistant/AssistantPanel'
 import ScenarioSimulator from '@/components/scenario/ScenarioSimulator'
 import SovereignBrief from '@/components/brief/SovereignBrief'
 import CO2EnergyPage from '@/components/co2/CO2EnergyPage'
+import CO2ModelResults from '@/components/co2/CO2ModelResults'
 import ConnectedCarbonPage from '@/components/carbon/ConnectedCarbonPage'
 import Q2EventsPage from '@/components/q2/Q2EventsPage'
 import Q2ResultsCard from '@/components/q2/Q2ResultsCard'
@@ -47,12 +50,8 @@ import { getQ2Summary, type Q2Summary } from '@/lib/api/q2'
 import {
   Overview,
   CarbonMarkets,
-  Co2,
-  Country,
-  PerformanceResults,
   Product,
   Quality,
-  Transition,
 } from '@/components/dashboard'
 import type { CountryYear, DashboardData, ScenarioName } from '@/lib/assistant/types'
 
@@ -143,7 +142,7 @@ function LabeledSelect({
   return (
     <label className="v2-select">
       <span>{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)}>
+      <select aria-label={label} value={value} onChange={(e) => onChange(e.target.value)}>
         {options.map((x) => (
           <option value={x.value} key={x.value}>
             {x.label}
@@ -682,8 +681,7 @@ function CountryPage({ data }: { data: DashboardData }) {
   )
 }
 function ModelPage({ data, setPage }: { data: DashboardData; setPage: (page: Page) => void }) {
-  const carbon = data.carbon.EU_ETS || data.carbon[data.markets[0]],
-    model = data.co2Model
+  const carbon = data.carbon.EU_ETS || data.carbon[data.markets[0]]
   return (
     <>
       <PageHead
@@ -699,48 +697,11 @@ function ModelPage({ data, setPage }: { data: DashboardData; setPage: (page: Pag
         </span>
       </div>
       <div className="v2-model-grid">
-        <div className="v2-card">
-          <span className="v2-model-number">01 / CARBON PRICE</span>
-          <h2>What are we predicting?</h2>
-          <p>Carbon prices 30 trading days ahead for five markets.</p>
-          <h3>Which model is used?</h3>
-          <p>
-            Market-specific random forest forecasting in the existing dashboard export. The
-            delivered Q1 ARIMA analysis supplies the separate 30-day outlook in Sovereign Brief; its
-            live agent is awaiting integration.
-          </p>
-          <h3>How accurate is it?</h3>
-          <p>
-            For EU ETS, average percentage error was <strong>{num(carbon.model.mape, 2)}%</strong>{' '}
-            on held-out data.
-          </p>
-        </div>
-        <div className="v2-card">
-          <span className="v2-model-number">02 / CO₂ PER PERSON</span>
-          <h2>What are we predicting?</h2>
-          <p>Country CO₂ emissions per person from energy mix.</p>
-          <h3>Which model is used?</h3>
-          <p>
-            {model.algorithm} in the existing dashboard export. The requested XGBoost energy-mix
-            specialist has no connected trained artifact yet; its scores are awaiting integration.
-          </p>
-          <h3>How accurate is it?</h3>
-          <p>
-            Held-out{' '}
-            <Term
-              label="R²"
-              meaning="A measure of how much variation the model explains in test data."
-            />{' '}
-            was <strong>{num(model.r2, 3)}</strong>; prediction error was{' '}
-            <strong>{num(model.rmse, 3)} tonnes per person</strong>.
-          </p>
-        </div>
+        <CarbonModelResults />
         <Q2ResultsCard onOpen={() => setPage('Climate Events')} />
       </div>
+      <CO2ModelResults />
       <Q3ResultsCard />
-      <Detail title="Full model scores, features, training and test periods">
-        <PerformanceResults data={data} />
-      </Detail>
     </>
   )
 }
@@ -861,11 +822,7 @@ export default function DashboardV2() {
       .catch(() => setQ2Summary(null))
   }, [])
   useEffect(() => {
-    fetch('/data/dashboard.json')
-      .then((r) => {
-        if (!r.ok) throw new Error('Dashboard data export is unavailable')
-        return r.json()
-      })
+    getDashboard()
       .then((result: DashboardData) => {
         setData(result)
         setMarket(result.markets.includes('EU_ETS') ? 'EU_ETS' : result.markets[0] || '')
@@ -924,7 +881,7 @@ export default function DashboardV2() {
         <main className="v2-content">
           {error ? (
             <div className="v2-error">
-              {error}. Run build_data.py to regenerate the local data export.
+              {error}. Check that FastAPI is running and the supplied analysis files are available.
             </div>
           ) : !data || !market ? (
             <div className="v2-loading">Loading competition data…</div>

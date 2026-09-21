@@ -30,6 +30,7 @@ class CarbonForecastRequest(BaseModel):
 class CO2PredictionRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
     energy_mix: EnergyMix
+    year: int = Field(default=2026, ge=2000, le=2026)
 
 
 class ScenarioComparisonRequest(CO2PredictionRequest):

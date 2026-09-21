@@ -18,7 +18,7 @@ class ScenarioEngine:
         if not getattr(self.co2_agent, "connected", True):
             return {
                 "status": "model_not_connected",
-                "message": "Final CO₂ prediction model is awaiting integration.",
+                "message": "The CO2 model could not be loaded. Check component health.",
             }
         baseline_result = self.baseline_provider(country, target_year)
         if baseline_result.get("status") != "success":

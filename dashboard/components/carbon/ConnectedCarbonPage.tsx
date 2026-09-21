@@ -60,11 +60,6 @@ export default function ConnectedCarbonPage({
           <strong>Live carbon specialist</strong>
           <span>{message}</span>
         </div>
-        <p className="v2-export-label">
-          The analysis export below is a separate, previously generated result from the supplied
-          competition data.
-        </p>
-        {children}
       </>
     )
   const end = result.forecast.at(-1)
@@ -88,6 +83,7 @@ export default function ConnectedCarbonPage({
       date: point.date,
       observed: undefined as number | undefined,
       forecast: point.predicted_price,
+      lower: point.lower_95, upper: point.upper_95,
     })),
   ]
   return (
@@ -104,7 +100,7 @@ export default function ConnectedCarbonPage({
         </div>
         <label className="v2-select">
           <span>Carbon market</span>
-          <select value={market} onChange={(event) => setMarket(event.target.value)}>
+          <select aria-label="Carbon market" value={market} onChange={(event) => setMarket(event.target.value)}>
             {data.markets.map((item) => (
               <option key={item} value={item}>
                 {item.replaceAll('_', ' ')}
@@ -143,7 +139,7 @@ export default function ConnectedCarbonPage({
           <div className="v2-kpi-label">Model accuracy</div>
           <div className="v2-kpi-value">{fmt(result.model.mape)}% MAPE</div>
           <p>
-            RMSE {fmt(result.model.rmse)} {result.currency}
+            Rolling-origin RMSE {fmt(result.model.rmse)} {result.currency}
           </p>
         </div>
       </div>
@@ -184,6 +180,8 @@ export default function ConnectedCarbonPage({
                 dot={false}
                 strokeWidth={2.5}
               />
+              <Line dataKey="lower" name="95% lower bound" stroke="#9bb8c0" dot={false} strokeDasharray="2 3" />
+              <Line dataKey="upper" name="95% upper bound" stroke="#9bb8c0" dot={false} strokeDasharray="2 3" />
             </LineChart>
           </ResponsiveContainer>
         </div>

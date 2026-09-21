@@ -17,12 +17,12 @@ import {
 
 import type { CountryYear, DashboardData, ScenarioName } from '@/lib/assistant/types'
 
-import { compareScenario, type EnergyMix, type ScenarioSuccess } from '@/lib/api/client'
+import { predictCO2, type EnergyMix, type CO2PredictionSuccess } from '@/lib/api/client'
 
 import { balanceEnergyMix, rebalanceEnergyMix } from '@/lib/calculations/energy-mix'
 
-import { buildPerCapitaChart } from '@/lib/scenario/chart-data'
-import { getCountryScenarios, type Q3Scenarios, type Q3Scenario } from '@/lib/api/q3'
+
+import { getCountryScenarios, type Q3Scenarios, type Q3Scenario, type Q3AnnualPoint } from '@/lib/api/q3'
 
 const paths: ScenarioName[] = ['Business-as-Usual', 'Moderate Transition', 'Accelerated Transition']
 
@@ -130,9 +130,9 @@ export default function ScenarioSimulator({ data }: { data: DashboardData }) {
 
   const [mix, setMix] = useState<EnergyMix>(() => observedMix(observed!))
 
-  const [result, setResult] = useState<ScenarioSuccess | null>(null)
+  const [result, setResult] = useState<CO2PredictionSuccess | null>(null)
 
-  const [message, setMessage] = useState('Final CO₂ prediction model is awaiting integration.')
+  const [message, setMessage] = useState('Adjust the energy mix and run the simulation.')
 
   const [loading, setLoading] = useState(false)
 
@@ -150,7 +150,7 @@ export default function ScenarioSimulator({ data }: { data: DashboardData }) {
     }
 
     setResult(null)
-    setMessage('Final CO₂ prediction model is awaiting integration.')
+    setMessage('Adjust the energy mix and run the simulation.')
     setRunStatus('')
     setLoading(false)
     setSimulationStatus('idle')
@@ -183,29 +183,6 @@ export default function ScenarioSimulator({ data }: { data: DashboardData }) {
     [rows, q3],
   )
 
-  const baselineAnnual = result?.baseline.yearly_forecast?.find(
-    (point) => point.year === selectedForecastYear,
-  )?.co2_per_capita_t
-
-  const scenarioAnnual = result?.user_scenario.yearly_forecast?.find(
-    (point) => point.year === selectedForecastYear,
-  )?.co2_per_capita_t
-
-  const baselineSelected =
-    baselineAnnual ??
-    (result?.target_year === selectedForecastYear ? result.baseline.co2_per_capita_t : undefined)
-
-  const scenarioSelected =
-    scenarioAnnual ??
-    (result?.target_year === selectedForecastYear
-      ? result.user_scenario.co2_per_capita_t
-      : undefined)
-
-  const selectedDifference =
-    baselineSelected !== undefined && scenarioSelected !== undefined
-      ? scenarioSelected - baselineSelected
-      : undefined
-
   const total = fields.reduce((sum, { key }) => sum + mix[key], 0)
 
   const valid =
@@ -214,7 +191,7 @@ export default function ScenarioSimulator({ data }: { data: DashboardData }) {
 
   const chart = q3Chart
 
-  const perCapitaChart = useMemo(() => (result ? buildPerCapitaChart(result) : []), [result])
+
 
   const mixChart = fields.map(({ key, label }) => ({
     source: label,
@@ -244,14 +221,14 @@ export default function ScenarioSimulator({ data }: { data: DashboardData }) {
     setLoading(true)
     setResult(null)
 
-    setMessage('Running your energy scenario…')
+    setMessage('Running energy-mix simulation...')
 
-    setRunStatus('Running your energy scenario…')
+    setRunStatus('Running energy-mix simulation...')
 
     setSimulationStatus('loading')
 
     try {
-      const response = await compareScenario(country, mix, selectedForecastYear)
+      const response = await predictCO2(mix, observed!.year)
 
       if (version !== requestVersion.current) {
         return
@@ -263,24 +240,27 @@ export default function ScenarioSimulator({ data }: { data: DashboardData }) {
         setRunStatus('Simulation complete.')
         setSimulationStatus('success')
       } else {
-        const detail =
-          response.status === 'model_not_connected'
-            ? 'Final CO₂ prediction model is awaiting integration.'
-            : response.status === 'baseline_not_available'
-              ? 'The Current Trend baseline is not available yet.'
-              : response.message
+        const detail = `Prediction could not be generated. ${response.message}`
 
         setMessage(detail)
         setRunStatus(detail)
 
-        setSimulationStatus(response.status === 'prediction_error' ? 'error' : response.status)
+        setSimulationStatus(
+          response.status === 'model_not_connected' ||
+          response.status === 'baseline_not_available' ||
+          response.status === 'forecast_not_available' ||
+          response.status === 'year_not_supported' ||
+          response.status === 'validation_error'
+            ? response.status
+            : 'error',
+        )
       }
     } catch (error) {
       if (version !== requestVersion.current) {
         return
       }
 
-      const detail = error instanceof Error ? error.message : 'Simulation is unavailable.'
+      const detail = 'Prediction could not be generated.'
 
       setMessage(detail)
       setRunStatus(detail)
@@ -296,13 +276,6 @@ export default function ScenarioSimulator({ data }: { data: DashboardData }) {
     return <div className="v2-error">Country data is unavailable.</div>
   }
 
-  const increase = selectedDifference !== undefined && selectedDifference > 0
-
-  const pct =
-    baselineSelected !== undefined && baselineSelected > 0 && selectedDifference !== undefined
-      ? Math.abs((selectedDifference / baselineSelected) * 100)
-      : undefined
-
   return (
     <>
       <div className="v2-page-head">
@@ -312,8 +285,7 @@ export default function ScenarioSimulator({ data }: { data: DashboardData }) {
           <h1>2030 Emissions Simulator</h1>
 
           <p>
-            Change a country&apos;s future energy mix and see how its predicted CO₂ emissions could
-            change by 2030.
+            Compare Q3 pathways through 2030 and estimate CO2 per person for a custom energy mix.
           </p>
         </div>
 
@@ -322,6 +294,7 @@ export default function ScenarioSimulator({ data }: { data: DashboardData }) {
             <span>Country</span>
 
             <select
+              aria-label="Country"
               value={country}
               onChange={(event) => {
                 requestVersion.current += 1
@@ -342,6 +315,7 @@ export default function ScenarioSimulator({ data }: { data: DashboardData }) {
             <span>Forecast Year</span>
 
             <select
+              aria-label="Forecast Year"
               value={selectedForecastYear}
               onChange={(event) => {
                 requestVersion.current += 1
@@ -353,7 +327,7 @@ export default function ScenarioSimulator({ data }: { data: DashboardData }) {
                 setRunStatus('')
                 setSimulationStatus('idle')
 
-                setMessage('Run Simulation to request a prediction for the selected year.')
+                setMessage('Adjust the energy mix and run the simulation.')
               }}
             >
               {([2027, 2028, 2029, 2030] as const).map((year) => (
@@ -391,34 +365,19 @@ export default function ScenarioSimulator({ data }: { data: DashboardData }) {
         />
 
         <Metric
-          label={`${labels[path]} · ${selectedForecastYear}`}
+          label={`BAU · ${selectedForecastYear}`}
           value={
-            selectedPathValue === undefined
+            bauValue === undefined
               ? 'Unavailable'
-              : `${fmt(selectedPathValue, 2)} t/person`
+              : `${fmt(bauValue, 2)} t/person`
           }
           detail="Q3 conditional scenario · separate from final specialist model"
         />
 
-        <Metric
-          label={`Your Plan · ${selectedForecastYear}`}
-          value={
-            scenarioSelected === undefined
-              ? 'Awaiting model'
-              : `${fmt(scenarioSelected, 2)} t/person`
-          }
-          detail="CO₂ Specialist Model + your energy plan"
-        />
-
-        <Metric
-          label={`Compared with Current Trend · ${selectedForecastYear}`}
-          value={
-            selectedDifference === undefined
-              ? 'Unavailable'
-              : `${signed(selectedDifference, 2)} t/person`
-          }
-          detail="Final-model scenario comparison · per person"
-        />
+        {(['Moderate', 'Accelerated'] as const).map(name => <Metric key={name}
+          label={`${name} · ${selectedForecastYear}`}
+          value={q3 ? `${fmt(q3.scenarios[name].find(p => p.year === selectedForecastYear)?.co2_per_capita_t, 2)} t/person` : 'Unavailable'}
+          detail="Q3 conditional scenario" />)}
       </div>
 
       <div className="v2-live-status" role="status">
@@ -447,23 +406,7 @@ export default function ScenarioSimulator({ data }: { data: DashboardData }) {
           <span className="plan-year">{country} · 2030</span>
         </div>
 
-        <div className="scenario-baseline">
-          <strong>Current Trend {selectedForecastYear} energy mix</strong>
-
-          {result ? (
-            <span>
-              {fields
-                .map(({ key, label }) => `${label} ${fmt(result.baseline.energy_mix[key])}%`)
-                .join(' · ')}
-            </span>
-          ) : (
-            <span>
-              Awaiting validated baseline output. The inputs below start from observed{' '}
-              {observed.year} values.
-            </span>
-          )}
-        </div>
-
+        <p className="v2-subtitle">Custom estimates use the observed {observed.year} reference year for the Random Forest. They describe your chosen mix, not a prediction for {selectedForecastYear}.</p>
         <div className="plan-grid">
           {fields.map(({ key, label }) => (
             <label className="plan-field" key={key}>
@@ -674,153 +617,12 @@ export default function ScenarioSimulator({ data }: { data: DashboardData }) {
       </section>
 
       {result && (
-        <section className="v2-card v2-chart-card">
-          <h2>Current Trend vs Your Energy Plan · CO₂ per person</h2>
-
-          <p className="v2-subtitle">
-            Specialist model output · tonnes of CO₂ per person. A single point is shown when only
-            the selected year is available; no intermediate years are inferred.
-          </p>
-
-          <div className="v2-chart v2-chart-compact">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart
-                data={perCapitaChart}
-                margin={{
-                  top: 16,
-                  right: 25,
-                  bottom: 5,
-                  left: 5,
-                }}
-              >
-                <CartesianGrid vertical={false} stroke="#e7edef" />
-
-                <XAxis
-                  dataKey="year"
-                  type="number"
-                  domain={[2027, 2030]}
-                  ticks={[2027, 2028, 2029, 2030]}
-                  tick={{
-                    fontSize: 11,
-                  }}
-                />
-
-                <YAxis
-                  width={58}
-                  tick={{
-                    fontSize: 11,
-                  }}
-                  tickFormatter={(value) => fmt(Number(value), 1)}
-                  domain={['auto', 'auto']}
-                />
-
-                <Tooltip
-                  formatter={(value: any, name: any) => [`${fmt(Number(value), 2)} t/person`, name]}
-                />
-
-                <Legend verticalAlign="bottom" height={34} />
-
-                <ReferenceLine x={selectedForecastYear} stroke="#cb8a40" strokeDasharray="3 3" />
-
-                <Line
-                  dataKey="current"
-                  name="Current Trend · model"
-                  stroke="#546877"
-                  strokeWidth={2.4}
-                  dot={{ r: 5 }}
-                  isAnimationActive={false}
-                />
-
-                <Line
-                  dataKey="plan"
-                  name="Your Energy Plan · model"
-                  stroke="#8b5bb2"
-                  strokeWidth={2.8}
-                  dot={{ r: 6 }}
-                  isAnimationActive={false}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-
-          <p className="v2-subtitle">
-            Custom specialist predictions are shown separately from Q3 conditional scenario
-            pathways. Both charts use tonnes CO₂ per person.
-          </p>
+        <section className="v2-card" aria-live="polite">
+          <h2>Your Energy Plan</h2>
+          <div className="v2-kpi-value">{fmt(result.co2_per_capita_t, 2)} t/person</div>
+          <p>{result.model.name} estimate using your submitted mix and reference year {result.year}.
+            This single energy-mix estimate is separate from Q3 annual pathways.</p>
         </section>
-      )}
-
-      {result && (
-        <>
-          <SectionTitle
-            title={`Your Energy Plan in ${selectedForecastYear}`}
-            detail={
-              baselineSelected === undefined || scenarioSelected === undefined
-                ? 'Annual specialist predictions for this year are awaiting integration.'
-                : `Final-model comparison · tonnes of CO₂ per person in ${selectedForecastYear}`
-            }
-          />
-
-          <div className="plan-metrics">
-            <div>
-              <span>Current Trend · {selectedForecastYear}</span>
-
-              <strong>
-                {baselineSelected === undefined
-                  ? 'Unavailable'
-                  : `${fmt(baselineSelected, 2)} t/person`}
-              </strong>
-            </div>
-
-            <div>
-              <span>Your Plan · {selectedForecastYear}</span>
-
-              <strong>
-                {scenarioSelected === undefined
-                  ? 'Unavailable'
-                  : `${fmt(scenarioSelected, 2)} t/person`}
-              </strong>
-            </div>
-
-            <div>
-              <span>Difference</span>
-
-              <strong>
-                {selectedDifference === undefined
-                  ? 'Unavailable'
-                  : `${signed(selectedDifference, 2)} t/person`}
-              </strong>
-            </div>
-
-            <div>
-              <span>{increase ? 'Projected increase' : 'Potential reduction'}</span>
-
-              <strong>{pct === undefined ? 'Unavailable' : `${fmt(pct, 2)}%`}</strong>
-            </div>
-          </div>
-
-          <div className="v2-explain v2-neutral">
-            <strong>What does this mean?</strong>
-
-            <p>
-              {baselineSelected === undefined || scenarioSelected === undefined
-                ? `No validated specialist prediction is available for ${selectedForecastYear}. Run the simulation for this year after the model and baseline are connected.`
-                : `Under your selected plan, ${country}'s predicted CO₂ per person in ${selectedForecastYear} is ${fmt(
-                    scenarioSelected,
-                    2,
-                  )} tonnes versus ${fmt(
-                    baselineSelected,
-                    2,
-                  )} tonnes under Current Trend. This is ${
-                    selectedDifference === 0
-                      ? 'unchanged'
-                      : pct === undefined
-                        ? 'a change whose percentage is unavailable because Current Trend is zero'
-                        : `a ${fmt(pct, 2)}% ${increase ? 'increase' : 'decrease'}`
-                  } relative to Current Trend. Source: CO₂ Specialist Model + your energy plan.`}
-            </p>
-          </div>
-        </>
       )}
 
       <SectionTitle
@@ -900,14 +702,7 @@ export default function ScenarioSimulator({ data }: { data: DashboardData }) {
         <strong>Why this matters</strong>
 
         <p>
-          {selectedDifference !== undefined
-            ? `The selected energy plan is associated with ${fmt(
-                Math.abs(selectedDifference),
-                2,
-              )} tonnes ${
-                increase ? 'higher' : 'lower'
-              } projected CO₂ per person in ${selectedForecastYear} than Current Trend. This is a model comparison, not a causal estimate.`
-            : selectedPathValue === undefined
+          {selectedPathValue === undefined
               ? q3Message
               : `The Q3 ${labels[path]} pathway gives ${fmt(selectedPathValue, 2)} tonnes CO₂ per person in ${selectedForecastYear}${bauValue === undefined ? '.' : `, ${fmt(Math.abs(selectedPathValue - bauValue), 2)} tonnes ${selectedPathValue > bauValue ? 'above' : 'below'} Current Trend.`} A custom energy-mix comparison requires the separate CO₂ specialist model.`}
         </p>
@@ -920,12 +715,11 @@ export default function ScenarioSimulator({ data }: { data: DashboardData }) {
           {result ? (
             <p>
               Model: {result.model.name}. Target: CO₂ per capita. R²: {fmt(result.model.r2, 3)}.
-              RMSE: {fmt(result.model.rmse, 3)} t/person. Both scenarios use the same model.
+              RMSE: {fmt(result.model.rmse, 3)} t/person. Custom estimates use the observed reference year.
             </p>
           ) : (
             <p>
-              Final model name, features, R², RMSE, training period and testing method will appear
-              when validated team outputs are connected. No final-model score is available yet.
+              Run Simulation to see the Random Forest estimate and its held-out metrics. The Model Results page provides the full evidence package.
             </p>
           )}
 

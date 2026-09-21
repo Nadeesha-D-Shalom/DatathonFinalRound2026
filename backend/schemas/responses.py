@@ -13,6 +13,12 @@ class StateResponse(BaseModel):
         "year_not_supported",
         "validation_error",
         "prediction_error",
+        "model_not_found",
+        "feature_file_not_found",
+        "feature_engineering_missing",
+        "feature_mismatch",
+        "invalid_year",
+        "model_load_error",
     ]
     message: str
     target_year: Literal[2027, 2028, 2029, 2030] | None = None
@@ -21,12 +27,15 @@ class StateResponse(BaseModel):
 class CarbonForecastPoint(BaseModel):
     date: date
     predicted_price: float = Field(ge=0, allow_inf_nan=False)
+    lower_95: float | None = Field(default=None, allow_inf_nan=False)
+    upper_95: float | None = Field(default=None, allow_inf_nan=False)
 
 
 class CarbonModelInfo(BaseModel):
     name: str = Field(min_length=1)
     rmse: float = Field(ge=0, allow_inf_nan=False)
     mape: float = Field(ge=0, allow_inf_nan=False)
+    methodology: str | None = None
 
 
 class CarbonForecastSuccess(BaseModel):
@@ -62,6 +71,10 @@ class CO2PredictionSuccess(BaseModel):
     model_config = ConfigDict(extra="forbid")
     status: Literal["success"]
     co2_per_capita_t: float = Field(ge=0, allow_inf_nan=False)
+    predicted_co2_per_capita_t: float | None = Field(default=None, ge=0, allow_inf_nan=False)
+    target: Literal["co2_per_capita_t"] = "co2_per_capita_t"
+    unit: str = "tonnes CO2 per person"
+    year: int | None = None
     co2_emissions_mt: float | None = Field(default=None, ge=0, allow_inf_nan=False)
     prediction_year: Literal[2027, 2028, 2029, 2030] | None = None
     model: CO2ModelInfo
@@ -69,6 +82,8 @@ class CO2PredictionSuccess(BaseModel):
 
     @model_validator(mode="after")
     def validate_annual_forecast(self):
+        if self.predicted_co2_per_capita_t is None:
+            self.predicted_co2_per_capita_t = self.co2_per_capita_t
         if self.yearly_forecast is not None:
             years = [point.year for point in self.yearly_forecast]
             if years != [2027, 2028, 2029, 2030]:

@@ -12,15 +12,15 @@ import {
   YAxis,
 } from 'recharts'
 import { ArrowUp, Database, MessageCircle, ShieldCheck, X } from 'lucide-react'
-import { answerQuestion } from '@/lib/assistant/resolver'
+import { queryAssistant, type AssistantContext as BackendContext } from '@/lib/api/assistant'
 import type { AssistantAnswer, AssistantContext, DashboardData } from '@/lib/assistant/types'
 
 type Message = { role: 'user' | 'assistant'; text?: string; answer?: AssistantAnswer }
 const starters = [
   'Forecast EU ETS',
-  'Compare Germany and France',
+  "What is Colombia's transition status?",
   'What happened in climate events?',
-  'China 2030 scenarios',
+  'Compare BAU and Accelerated for Algeria',
 ]
 function MetricResponse({ answer }: { answer: AssistantAnswer }) {
   return answer.metrics?.length ? (
@@ -137,7 +137,7 @@ export default function AssistantPanel({
   onClose: () => void
 }) {
   const [messages, setMessages] = useState<Message[]>([])
-  const [context, setContext] = useState<AssistantContext>({})
+  const [context, setContext] = useState<BackendContext>({})
   const [draft, setDraft] = useState('')
   const bodyRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -153,13 +153,28 @@ export default function AssistantPanel({
       body.scrollTo({ top: Math.max(0, top - 14), behavior: 'smooth' })
     }
   }, [messages])
-  const send = (question: string) => {
+  const [pending, setPending] = useState(false)
+  const send = async (question: string) => {
     const text = question.trim()
-    if (!text) return
-    const result = answerQuestion(text, data, context)
-    setContext(result.context)
-    setMessages((old) => [...old, { role: 'user', text }, { role: 'assistant', answer: result }])
+    if (!text || pending) return
+    setPending(true)
+    setMessages(old => [...old, { role: 'user', text }])
     setDraft('')
+    try {
+      const result = await queryAssistant(text, context)
+      if (!result.answer) throw new Error('Analysis service unavailable.')
+      setContext(result.context)
+      const answer: AssistantAnswer = {
+        intent: 'general_summary', title: result.intent.replaceAll('_', ' '),
+        summary: result.answer, source: result.sources.join(' · ') || 'Supplied-data coverage', context: {},
+      }
+      setMessages(old => [...old, { role: 'assistant', answer }])
+    } catch {
+      setMessages(old => [...old, { role: 'assistant', answer: {
+        intent: 'unknown', title: 'Service unavailable', summary: 'Briefwright could not reach the analysis service. Please try again.',
+        source: 'FastAPI', context: {},
+      } }])
+    } finally { setPending(false) }
   }
   return (
     <>
@@ -201,6 +216,7 @@ export default function AssistantPanel({
             <AssistantMessage key={i} message={m} />
           ))}
         </div>
+        {pending && <p role="status">Loading validated analysis…</p>}
         <form
           className="assistant-composer"
           onSubmit={(e) => {
@@ -216,11 +232,11 @@ export default function AssistantPanel({
               placeholder="Ask about the climate data..."
               aria-label="Ask Briefwright"
             />
-            <button type="submit" disabled={!draft.trim()} aria-label="Send question">
+            <button type="submit" disabled={!draft.trim() || pending} aria-label="Send question">
               <ArrowUp size={17} />
             </button>
           </div>
-          <small>No external AI service. Questions are parsed and answered locally.</small>
+          <small>Deterministic analysis through the project backend.</small>
         </form>
       </aside>
     </>

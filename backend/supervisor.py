@@ -1,4 +1,6 @@
 from pydantic import ValidationError
+import logging
+import uuid
 
 from backend.agents.carbon_agent import CarbonForecastAgent
 from backend.agents.co2_agent import CO2PredictionAgent
@@ -39,6 +41,43 @@ class Supervisor:
         self.q3_transition_agent = q3_transition_agent or Q3TransitionAgent()
 
     def run(self, task: str, payload: dict) -> dict:
+        request_id = uuid.uuid4().hex
+        agent = ("CarbonForecastAgent" if task.startswith("carbon_") else
+                 "CO2PredictionAgent" if task.startswith("co2_") else
+                 "EventImpactAgent" if task.startswith("q2_") else
+                 "Q3TransitionAgent" if task.startswith("q3_") else "SupervisorAggregator")
+        result = self._run(task, payload)
+        logging.getLogger("monsoon.supervisor").info(
+            "request=%s route=%s agent=%s status=%s", request_id, task, agent, result.get("status"))
+        return result
+
+    def _run(self, task: str, payload: dict) -> dict:
+        from backend.services.country_data_service import get_country_energy_co2, get_countries, CountryNotFound
+        from backend.services.dashboard_service import dashboard
+        from backend.services.brief_service import sovereign_brief
+        from backend.services.assistant_service import query
+        extra = {
+            "carbon_markets": self.carbon_agent.get_markets if hasattr(self.carbon_agent, "get_markets") else None,
+            "carbon_model_results": lambda: self.carbon_agent.get_model_results(),
+            "carbon_outlook": lambda: self.carbon_agent.get_outlook(payload.get("market", "")),
+            "co2_model_summary": lambda: self.co2_agent.analysis("summary"),
+            "co2_feature_importance": lambda: self.co2_agent.analysis("features"),
+            "co2_model_comparison": lambda: self.co2_agent.analysis("comparison"),
+            "co2_test_predictions": lambda: self.co2_agent.analysis("predictions"),
+            "country_profile": lambda: get_country_energy_co2(payload.get("country", "")),
+            "country_list": lambda: {"status": "success", "countries": get_countries()},
+            "dashboard": dashboard,
+            "sovereign_brief": lambda: sovereign_brief(self, payload.get("country", ""), payload.get("market", "EU_ETS")),
+            "assistant_query": lambda: query(self, payload.get("query", ""), payload.get("context")),
+        }
+        if task in extra:
+            try:
+                return extra[task]()
+            except CountryNotFound:
+                return {"status": "country_not_found", "message": "Country is unavailable in the supplied datasets."}
+            except Exception:
+                logging.getLogger("monsoon.supervisor").exception("Route failed: %s", task)
+                return {"status": "dataset_error", "message": "The requested validated analysis is unavailable or invalid."}
         q3_tasks = {
             "q3_summary": lambda: self.q3_transition_agent.get_summary(),
             "q3_global_trends": lambda: self.q3_transition_agent.get_global_trends(),
@@ -91,7 +130,7 @@ class Supervisor:
                 schema = CarbonForecastSuccess
             elif task == "co2_prediction":
                 request = CO2PredictionRequest.model_validate(payload)
-                predict = lambda: self.co2_agent.predict(request.energy_mix.model_dump())
+                predict = lambda: self.co2_agent.predict(request.energy_mix.model_dump(), target_year=request.year)
                 schema = CO2PredictionSuccess
             elif task == "compare_2030_scenario":
                 request = ScenarioComparisonRequest.model_validate(payload)

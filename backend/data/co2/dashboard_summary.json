@@ -1,0 +1,49 @@
+{
+    "task": "Q1.2 Predicting CO2 Per Capita from Energy Mix",
+    "model": "Random Forest Regressor",
+    "target": "co2_per_capita_t",
+    "validation": {
+        "r2": 0.3662,
+        "rmse": 5.3629,
+        "mae": 3.4116
+    },
+    "test": {
+        "r2": 0.3409,
+        "rmse": 5.5967,
+        "mae": 3.5645
+    },
+    "data_split": {
+        "train": "2000-2020",
+        "validation": "2021-2023",
+        "test": "2024-2026"
+    },
+    "features": [
+        "coal_pct",
+        "oil_pct",
+        "gas_pct",
+        "nuclear_pct",
+        "hydro_pct",
+        "solar_pct",
+        "wind_pct",
+        "other_renewables_pct",
+        "fossil_total_pct",
+        "renewables_total_pct",
+        "low_carbon_pct",
+        "solar_wind_pct",
+        "fossil_clean_ratio",
+        "energy_hhi",
+        "dominant_source_pct",
+        "year_norm"
+    ],
+    "top_features": [
+        "gas_pct",
+        "hydro_pct",
+        "coal_pct",
+        "other_renewables_pct",
+        "nuclear_pct",
+        "energy_hhi",
+        "oil_pct",
+        "renewables_total_pct"
+    ],
+    "interpretation": "Energy mix provides meaningful but incomplete predictive information for country-level CO2 per capita. The final Random Forest achieved an unseen test R2 of 0.3409."
+}

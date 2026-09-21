@@ -6,7 +6,9 @@ import math
 from functools import lru_cache
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[1] / "models" / "q3"
+_DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "q3"
+_MODEL_DIR = Path(__file__).resolve().parents[1] / "models" / "q3"
+ROOT = _DATA_DIR if _DATA_DIR.is_dir() and (_DATA_DIR / "country_transition_archetypes.csv").is_file() else _MODEL_DIR
 SCENARIOS = ("BAU", "Moderate", "Accelerated")
 
 

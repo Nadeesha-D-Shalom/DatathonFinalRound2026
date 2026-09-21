@@ -1,24 +1,15 @@
-# CarbonScope prediction backend
+# Monsoon Mandate backend
 
-From the repository root:
+See the root README for environment setup and the complete API surface.
+Run `.venv/Scripts/python -m uvicorn backend.main:app --reload` from the repository
+root. Models and validated CSV/JSON outputs are read-only. Health checks load the
+trusted saved artifacts and exercise their data services. Failures return safe
+structured states; internal exceptions appear only in server logs.
 
-```powershell
-python -m pip install -r backend/requirements.txt
-python -m uvicorn backend.main:app --reload --port 8000
-```
+CarbonForecastAgent serves the validated ARIMA export; CO2PredictionAgent executes
+the cached Random Forest. EventImpactAgent exposes the Ridge experiment, and
+Q3TransitionAgent serves the supplied conditional scenarios. The Supervisor uses
+explicit task names. Briefwright and Sovereign Brief invoke these same tasks.
 
-
-Run the backend tests with `python -m unittest discover -s backend/tests -v`.
-The dashboard reads `NEXT_PUBLIC_API_BASE_URL` (see `dashboard/.env.example`); its local default is `http://localhost:8000`.
-
-The specialist models are currently absent. Carbon and CO₂ agents return `model_not_connected`. Once the CO₂ model is connected, the scenario engine will return `baseline_not_available` until a validated Current Trend energy mix for the selected year is available. No value in these development responses is a prediction.
-
-Q2 event-impact results are available through `GET /api/q2/summary`, `/api/q2/feature-importance`, `/api/q2/event-window-analysis`, and `/api/q2/impact-results`. The Q2 specialist reads and cross-checks the team's validated files in `backend/data/q2`; the trusted Ridge pickle artifacts stay in `backend/models/q2` and are not unpickled for display. The comparison covers multiple markets with different quoted currencies, so its pooled RMSE is not labeled as EUR or as EU ETS-only.
-
-Q3 transition outputs are in the supplied `backend/models/q3` package (the package was delivered there, rather than `backend/data/q3`). The read-only Q3 service validates country coverage, annual years, archetype counts, and 2030 summary agreement before serving the files through the Q3 specialist and supervisor. Routes: `GET /api/q3/summary`, `/api/q3/global-trends`, `/api/q3/archetypes`, `/api/q3/scenario-countries`, `/api/q3/countries/{country}/transition`, `/api/q3/countries/{country}/scenarios`, and `/api/q3/countries/{country}/2030`. Only six countries have validated annual pathways. The remaining countries return `scenario_not_available` while their transition archetypes remain available. Q3 pathways are deterministic conditional scenarios in tonnes CO₂ per person; they are separate from the CO₂ regression specialist.
-
-`GET /api/countries` and `GET /api/countries/{country}/energy-co2` serve observed records directly from the supplied emissions and energy CSVs. They are separate from `POST /api/co2/predict`, which goes through the supervisor to the CO₂ specialist. The CO₂ & Energy page requests both sources and labels observations and predictions separately.
-
-Integrate the delivered model, its exact feature order, artifact name, and measured metrics inside the corresponding agent file. The agent must preserve its `predict()` response contract. The scenario baseline provider in `services/scenario_engine.py` must be connected to a validated 2030 energy-mix output before comparisons can run. Both scenario branches call the same CO₂ agent.
-
-If the delivered CO₂ model provides annual values, each agent response may include `yearly_forecast` with exactly one validated entry for each year from 2027 through 2030. Each entry includes `co2_per_capita_t` and may include `co2_emissions_mt` when a validated total-emissions methodology is supplied. The 2030 annual per-capita value must match the endpoint. The dashboard never interpolates missing annual predictions.
+Q3's delivered files remain under models/q3, not data/q3. Q1.2 year inputs are
+restricted to 2000-2026; the simulator labels its custom estimate accordingly.

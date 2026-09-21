@@ -2,6 +2,11 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+import os
+import logging
+
+logging.basicConfig(level=logging.INFO)
 
 from backend.schemas.requests import (
     CarbonForecastRequest,
@@ -15,18 +20,26 @@ from backend.services.country_data_service import (
     get_countries,
     get_country_energy_co2,
 )
-from backend.services.carbon_analysis_service import get_carbon_analysis_outlook
 
 
-app = FastAPI(title="CarbonScope Prediction Backend", version="0.1.0")
+
+app = FastAPI(title="Monsoon Mandate", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=os.getenv("MONSOON_CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(","),
     allow_credentials=True,
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 supervisor = Supervisor()
+
+
+@app.exception_handler(Exception)
+async def unexpected_error(_request: Request, exc: Exception):
+    logging.getLogger("monsoon.api").error("Request failed", exc_info=exc)
+    return JSONResponse(status_code=500, content={
+        "status": "service_error", "message": "The analysis service could not complete this request."
+    })
 
 
 @app.exception_handler(RequestValidationError)
@@ -48,17 +61,17 @@ async def request_validation_error(_request: Request, exc: RequestValidationErro
 
 @app.get("/health")
 def health():
-    return {
-        "status": "ok",
-        "carbon_model": "connected" if supervisor.carbon_agent.connected else "not_connected",
-        "co2_model": "connected" if supervisor.co2_agent.connected else "not_connected",
-    }
+    from backend.services.health_service import health as readiness
+    return readiness(supervisor)
 
 
 @app.get("/api/countries")
 def countries():
     try:
-        return {"status": "success", "countries": get_countries()}
+        result = supervisor.run("country_list", {})
+        if result["status"] != "success":
+            raise DatasetError()
+        return result
     except DatasetError:
         return JSONResponse(
             status_code=503,
@@ -72,7 +85,12 @@ def countries():
 @app.get("/api/countries/{country}/energy-co2")
 def country_energy_co2(country: str):
     try:
-        return get_country_energy_co2(country)
+        result = supervisor.run("country_profile", {"country": country})
+        if result["status"] == "country_not_found":
+            raise CountryNotFound(country)
+        if result["status"] != "success":
+            raise DatasetError()
+        return result
     except CountryNotFound:
         return JSONResponse(
             status_code=404,
@@ -98,12 +116,62 @@ def carbon_forecast(request: CarbonForecastRequest):
 
 @app.get("/api/carbon/analysis-outlook/{market}")
 def carbon_analysis_outlook(market: str):
-    return get_carbon_analysis_outlook(market)
+    return supervisor.run("carbon_outlook", {"market": market})
 
 
 @app.post("/api/co2/predict")
 def co2_predict(request: CO2PredictionRequest):
     return supervisor.run("co2_prediction", request.model_dump())
+
+
+@app.get("/api/co2/model-summary")
+def co2_model_summary():
+    return supervisor.run("co2_model_summary", {})
+
+
+@app.get("/api/co2/feature-importance")
+def co2_feature_importance():
+    return supervisor.run("co2_feature_importance", {})
+
+
+@app.get("/api/co2/model-comparison")
+def co2_model_comparison():
+    return supervisor.run("co2_model_comparison", {})
+
+
+@app.get("/api/co2/test-predictions")
+def co2_test_predictions():
+    return supervisor.run("co2_test_predictions", {})
+
+
+@app.get("/api/dashboard")
+def dashboard():
+    return supervisor.run("dashboard", {})
+
+
+@app.get("/api/carbon/markets")
+def carbon_markets():
+    return supervisor.run("carbon_markets", {})
+
+
+@app.get("/api/carbon/model-results")
+def carbon_model_results():
+    return supervisor.run("carbon_model_results", {})
+
+
+@app.get("/api/brief/{country}")
+def brief(country: str, market: str = "EU_ETS"):
+    return supervisor.run("sovereign_brief", {"country": country, "market": market})
+
+
+class AssistantRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=2000)
+    context: dict[str, str | None] = Field(default_factory=dict)
+
+
+@app.post("/api/assistant/query")
+def assistant_query(request: AssistantRequest):
+    return supervisor.run("assistant_query", request.model_dump())
 
 
 @app.post("/api/scenario/compare")

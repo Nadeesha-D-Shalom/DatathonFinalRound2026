@@ -17,6 +17,12 @@ export type ApiState = {
     | 'year_not_supported'
     | 'validation_error'
     | 'prediction_error'
+    | 'model_not_found'
+    | 'feature_file_not_found'
+    | 'feature_engineering_missing'
+    | 'feature_mismatch'
+    | 'invalid_year'
+    | 'model_load_error'
   message: string
   target_year?: ForecastYear
 }
@@ -26,12 +32,16 @@ export type CarbonForecastSuccess = {
   currency: string
   last_observed_date: string
   last_observed_price: number
-  forecast: { date: string; predicted_price: number }[]
-  model: { name: string; rmse: number; mape: number }
+  forecast: { date: string; predicted_price: number; lower_95: number; upper_95: number }[]
+  model: { name: string; rmse: number; mape: number; methodology: string }
 }
 export type CO2PredictionSuccess = {
   status: 'success'
   co2_per_capita_t: number
+  predicted_co2_per_capita_t: number
+  target: 'co2_per_capita_t'
+  unit: string
+  year: number
   model: { name: string; r2: number; rmse: number }
 }
 export type CountryEnergyCO2 = {
@@ -145,8 +155,8 @@ export const getCarbonAnalysisOutlook = (market: string) =>
     | CarbonAnalysisOutlook
     | { status: 'market_not_available' | 'analysis_not_available'; message: string }
   >(`/api/carbon/analysis-outlook/${encodeURIComponent(market)}`)
-export const predictCO2 = (energyMix: EnergyMix) =>
-  request<CO2PredictionSuccess | ApiState>('/api/co2/predict', { energy_mix: energyMix })
+export const predictCO2 = (energyMix: EnergyMix, year = 2026) =>
+  request<CO2PredictionSuccess | ApiState>('/api/co2/predict', { year, energy_mix: energyMix })
 export const getCountries = () =>
   request<{ status: 'success'; countries: string[] }>('/api/countries')
 export const getCountryEnergyCO2 = (country: string) =>

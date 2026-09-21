@@ -32,55 +32,56 @@ class BackendTests(unittest.TestCase):
         self.client = TestClient(app)
 
     def test_health(self):
-        self.assertEqual(
-            self.client.get("/health").json(),
-            {"status": "ok", "carbon_model": "not_connected", "co2_model": "not_connected"},
-        )
+        result = self.client.get("/health").json()
+        self.assertEqual(result["status"], "ok")
+        self.assertEqual(result["carbon_model"], "connected")
+        self.assertEqual(result["co2_model"], "connected")
+        self.assertTrue(all(v == "ready" for v in result["components"].values()))
 
-    def test_agents_have_safe_missing_model_state(self):
-        self.assertEqual(CarbonForecastAgent().predict("EU_ETS")["status"], "model_not_connected")
-        self.assertEqual(CO2PredictionAgent().predict(VALID_MIX)["status"], "model_not_connected")
+    def test_agents_serve_validated_models(self):
+        self.assertEqual(CarbonForecastAgent().predict("EU_ETS")["status"], "success")
+        self.assertEqual(CO2PredictionAgent().predict(VALID_MIX)["status"], "success")
 
     def test_supervisor_routes_all_tasks(self):
         supervisor = Supervisor()
         self.assertEqual(
-            supervisor.run("carbon_forecast", {"market": "EU_ETS"})["status"], "model_not_connected"
+            supervisor.run("carbon_forecast", {"market": "EU_ETS"})["status"], "success"
         )
         self.assertEqual(
             supervisor.run("co2_prediction", {"energy_mix": VALID_MIX})["status"],
-            "model_not_connected",
+            "success",
         )
         self.assertEqual(
             supervisor.run(
                 "compare_2030_scenario",
                 {"country": "Germany", "target_year": 2030, "energy_mix": VALID_MIX},
             )["status"],
-            "model_not_connected",
+            "baseline_not_available",
         )
         self.assertEqual(supervisor.run("unknown", {})["status"], "validation_error")
 
     def test_api_development_states(self):
         self.assertEqual(
             self.client.post("/api/carbon/forecast", json={"market": "EU_ETS"}).json()["status"],
-            "model_not_connected",
+            "success",
         )
         self.assertEqual(
             self.client.post("/api/co2/predict", json={"energy_mix": VALID_MIX}).json()["status"],
-            "model_not_connected",
+            "success",
         )
         self.assertEqual(
             self.client.post(
                 "/api/scenario/compare",
                 json={"country": "Germany", "target_year": 2030, "energy_mix": VALID_MIX},
             ).json()["status"],
-            "model_not_connected",
+            "baseline_not_available",
         )
         self.assertEqual(
             self.client.post(
                 "/api/scenario/compare",
                 json={"country": "Egypt", "target_year": 2028, "energy_mix": VALID_MIX},
             ).json()["status"],
-            "model_not_connected",
+            "baseline_not_available",
         )
 
     def test_browser_preflight_and_scenario_response_are_distinct(self):
@@ -104,7 +105,7 @@ class BackendTests(unittest.TestCase):
             headers={"Origin": "http://localhost:3000"},
         )
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["status"], "model_not_connected")
+        self.assertEqual(response.json()["status"], "baseline_not_available")
         self.assertEqual(response.headers["access-control-allow-origin"], "http://localhost:3000")
 
     def test_scenario_year_contract_and_mix_tolerance(self):
@@ -114,7 +115,7 @@ class BackendTests(unittest.TestCase):
                 json={"country": "Egypt", "target_year": year, "energy_mix": VALID_MIX},
             )
             self.assertEqual(response.status_code, 200, year)
-            self.assertEqual(response.json()["status"], "model_not_connected", year)
+            self.assertEqual(response.json()["status"], "baseline_not_available", year)
             self.assertNotIn("co2_per_capita_t", response.json())
         for year in (2026, 2031, 2028.5, 2028.0, "2028"):
             response = self.client.post(
@@ -128,7 +129,7 @@ class BackendTests(unittest.TestCase):
             "/api/scenario/compare",
             json={"country": "Egypt", "target_year": 2028, "energy_mix": near},
         )
-        self.assertEqual(response.json()["status"], "model_not_connected")
+        self.assertEqual(response.json()["status"], "baseline_not_available")
         invalid = {**VALID_MIX, "coal_pct": 25}
         response = self.client.post(
             "/api/scenario/compare",

@@ -1,0 +1,2 @@
+Model,Target,Validation_R2,Validation_RMSE,Validation_MAE,Test_R2,Test_RMSE,Test_MAE,Train_Period,Validation_Period,Test_Period
+Random Forest,co2_per_capita_t,0.3662,5.3629,3.4116,0.3409,5.5967,3.5645,2000-2020,2021-2023,2024-2026

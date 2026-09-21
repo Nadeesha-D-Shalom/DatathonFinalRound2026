@@ -1,0 +1,23 @@
+{
+    "archetype_counts": {
+        "Accelerated": 15,
+        "BAU": 20,
+        "Moderate": 15
+    },
+    "scenario_method": {
+        "BAU": "Continue 2018-2026 CO2 per capita CAGR",
+        "Moderate": "BAU rate minus 1.5 percentage points",
+        "Accelerated": "BAU rate minus 3.5 percentage points"
+    },
+    "launch_year": 2026,
+    "forecast_end_year": 2030,
+    "representative_countries": [
+        "Turkey",
+        "Belgium",
+        "Algeria",
+        "Venezuela",
+        "Argentina",
+        "Czech Republic"
+    ],
+    "interpretation": "Countries follow distinct transition trajectories. Scenario differences widen through 2030, with Accelerated pathways producing consistently lower CO2 per capita than BAU."
+}

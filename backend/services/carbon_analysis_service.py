@@ -64,7 +64,7 @@ def _outlooks():
             "upper_95": values[3],
             "model": selected[0]["Model"],
             "source": "backend/data/carbon/carbon_price_30day_forecast.csv",
-            "note": "Delivered Q1 analysis export; the live Carbon specialist remains disconnected.",
+            "note": "Validated ARIMA 30 trading-day output served by the Carbon specialist.",
         }
     return output
 
@@ -79,5 +79,41 @@ def get_carbon_analysis_outlook(market: str) -> dict:
     except (OSError, csv.Error, KeyError, ValueError):
         return {
             "status": "analysis_not_available",
-            "message": "Validated Q1 carbon outlook is awaiting integration.",
+            "message": "Validated Q1 carbon outlook is unavailable or invalid.",
         }
+
+
+def _rows(filename):
+    with (ROOT / filename).open(encoding="utf-8-sig", newline="") as source:
+        return list(csv.DictReader(source))
+
+
+def model_results():
+    return {"status": "success", "model_comparison": _rows("model_summary.csv"),
+            "rolling_origin": _rows("rolling_origin_results.csv"),
+            "rolling_summary": _rows("rolling_origin_summary.csv"),
+            "true_30step": _rows("true_30step_results.csv"),
+            "source": "backend/data/carbon", "model": "ARIMA (1,1,1)"}
+
+
+def markets():
+    return {"status": "success", "markets": sorted(_outlooks())}
+
+
+@lru_cache(maxsize=5)
+def forecast(market):
+    outlook = _outlooks()[market]
+    metric = next(r for r in _rows("rolling_origin_summary.csv") if r["market"] == market)
+    points = [{"date": r["forecast_date"], "predicted_price": float(r["forecast_price"]),
+               "lower_95": float(r["lower_95"]), "upper_95": float(r["upper_95"])}
+              for r in _rows("carbon_price_30day_forecast.csv") if r["market"] == market]
+    points.sort(key=lambda r: r["date"])
+    if any(not all(math.isfinite(r[k]) for k in ("predicted_price", "lower_95", "upper_95"))
+           or not r["lower_95"] <= r["predicted_price"] <= r["upper_95"] for r in points):
+        raise ValueError("Invalid ARIMA interval")
+    return {"status": "success", "market": market, "currency": outlook["currency"],
+            "last_observed_date": outlook["last_observed_date"],
+            "last_observed_price": outlook["last_observed_price"], "forecast": points,
+            "model": {"name": outlook["model"], "rmse": float(metric["Avg_RMSE"]),
+                      "mape": float(metric["Avg_MAPE"]),
+                      "methodology": "Market-specific rolling-origin 30-step evaluation"}}

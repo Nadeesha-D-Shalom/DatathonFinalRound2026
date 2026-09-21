@@ -1037,3 +1037,10 @@
     margin-top: 9px;
   }
 }
+@media print {
+  .v2-sidebar, .v2-topbar, .assistant-panel, .assistant-mobile-scrim,
+  .v2-controls, .brief-print { display: none !important; }
+  .v2-shell { display: block !important; }
+  .v2-main { margin: 0 !important; padding: 0 !important; }
+  .v2-card, .v2-kpi { break-inside: avoid; box-shadow: none !important; }
+}
